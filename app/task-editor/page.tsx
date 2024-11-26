@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from '@/components/layout'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,43 +11,65 @@ import { Task, Question } from '@/types'
 import { Trash2 } from 'lucide-react'
 
 export default function TaskEditor() {
-  const [tasks, setTasks] = useState<Task[]>([
-    { 
-      id: '1', 
-      title: 'Math Quiz', 
-      description: 'Complete the algebra quiz', 
-      assignedTo: ['Group A'],
-      questions: [
-        { id: '1', text: 'What is 2 + 2?' },
-        { id: '2', text: 'Solve for x: 2x + 3 = 7' }
-      ]
-    },
-    { 
-      id: '2', 
-      title: 'History Essay', 
-      description: 'Write an essay on World War II', 
-      assignedTo: ['Group B'],
-      questions: [
-        { id: '1', text: 'What year did World War II start?' },
-        { id: '2', text: 'Name three major Allied powers.' }
-      ]
-    },
-  ])
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
-  const [newTask, setNewTask] = useState<Partial<Task>>({ 
-    title: '', 
-    description: '', 
-    assignedTo: [], 
-    questions: []
-  })
-  const [newQuestion, setNewQuestion] = useState('')
+const [tasks, setTasks] = useState<Task[]>([]);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [newTask, setNewTask] = useState<Partial<Task>>({
+    title: '',
+    description: '',
+    assignedTo: [],
+    questions: [],
+  });
+  const [newQuestion, setNewQuestion] = useState('');
 
-  const handleCreateTask = () => {
-    if (newTask.title && newTask.description && newTask.assignedTo && newTask.assignedTo.length > 0) {
-      setTasks([...tasks, { ...newTask, id: Date.now().toString(), questions: [] } as Task])
-      setNewTask({ title: '', description: '', assignedTo: [], questions: [] })
+  useEffect(() => {
+    // Fetch tasks from API
+    const fetchTasks = async () => {
+      try {
+        const res = await fetch('/api/tasks');
+        if (res.ok) {
+          const data: Task[] = await res.json();
+          setTasks(data);
+        } else {
+          console.error('Failed to fetch tasks');
+        }
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+      }
+    };
+    fetchTasks();
+  }, []);
+
+  const handleCreateTask = async () => {
+    if (
+      newTask.title &&
+      newTask.description &&
+      newTask.assignedTo &&
+      newTask.assignedTo.length > 0
+    ) {
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newTask),
+        });
+  
+        const result = await response.json();
+  
+        if (response.ok) {
+          // Refresh the tasks list
+          setTasks([...tasks, { ...newTask, id: result.id } as Task]);
+          setNewTask({ title: '', description: '', assignedTo: [], questions: [] });
+        } else {
+          console.error('Error creating task:', result.error);
+        }
+      } catch (error) {
+        console.error('Error creating task:', error);
+      }
     }
-  }
+  };
+  
 
   const handleUpdateTask = () => {
     if (editingTask) {
@@ -211,6 +233,5 @@ export default function TaskEditor() {
         </Card>
       </div>
     </Layout>
-  )
+  );
 }
-
