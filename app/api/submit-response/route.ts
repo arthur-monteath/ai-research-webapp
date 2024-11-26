@@ -1,19 +1,26 @@
-// app/api/submit-response/route.ts
-
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import path from 'path';
-import fs from 'fs';
 
 export async function POST(request: Request) {
   const body = await request.json();
 
   // Extract data from the request body
-  const { studentId, questionId, timeTaken, answer, chatLogs } = body;
+  const { studentId, taskId, questionId, timeTaken, answer, chatLogs } = body;
 
-  // Authenticate with Google Sheets API
+  // Decode the base64-encoded service account key
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+
+  if (!serviceAccountKey) {
+    return NextResponse.json({ success: false, error: 'Service account key not provided' }, { status: 500 });
+  }
+
+  const decodedKey = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+
+  // Authenticate with Google Sheets API using the decoded credentials
   const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(process.cwd(), 'config', 'service-account.json'),
+    credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
@@ -27,6 +34,7 @@ export async function POST(request: Request) {
     [
       new Date().toISOString(),
       studentId,
+      taskId,
       questionId,
       timeTaken,
       answer,
@@ -41,7 +49,7 @@ export async function POST(request: Request) {
   try {
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Sheet1!A:F', // Adjust the range as needed
+      range: 'Responses!A:G', // Adjust the range as needed
       valueInputOption: 'USER_ENTERED',
       requestBody: resource,
     });
@@ -49,6 +57,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error appending data to Google Sheets:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    let errorMessage = 'An unknown error occurred';
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }

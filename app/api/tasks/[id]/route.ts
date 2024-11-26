@@ -10,9 +10,20 @@ export async function GET(
 ) {
   const taskId = params.id;
 
-  // Authenticate with Google Sheets API
+  // Decode the base64-encoded service account key
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+
+  if (!serviceAccountKey) {
+    return NextResponse.json({ error: 'Service account key not provided' }, { status: 500 });
+  }
+
+  const decodedKey = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+
+  // Authenticate with Google Sheets API using the decoded credentials
   const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(process.cwd(), 'config', 'service-account.json'),
+    credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 
@@ -34,7 +45,7 @@ export async function GET(
     }
 
     const [id, title, description, assignedToStr] = taskRow;
-    const assignedTo = assignedToStr.split(',').map((group) => group.trim());
+    const assignedTo = assignedToStr.split(',').map((group: string) => group.trim());
 
     // Fetch questions
     const questionsRes = await sheets.spreadsheets.values.get({

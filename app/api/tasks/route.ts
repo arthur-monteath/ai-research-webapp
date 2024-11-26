@@ -5,9 +5,20 @@ import { google } from 'googleapis';
 import path from 'path';
 
 export async function GET(request: Request) {
-  // Authenticate with Google Sheets API
+  // Decode the base64-encoded service account key
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+
+  if (!serviceAccountKey) {
+    return NextResponse.json({ error: 'Service account key not provided' }, { status: 500 });
+  }
+
+  const decodedKey = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+
+  // Authenticate with Google Sheets API using the decoded credentials
   const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(process.cwd(), 'config', 'service-account.json'),
+    credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 
@@ -34,7 +45,7 @@ export async function GET(request: Request) {
 
     for (const row of tasksRows) {
       const [id, title, description, assignedToStr] = row;
-      const assignedTo = assignedToStr.split(',').map((group) => group.trim());
+      const assignedTo = assignedToStr.split(',').map((group: string) => group.trim());
       tasksMap[id] = {
         id,
         title,
@@ -73,10 +84,21 @@ export async function POST(request: Request) {
   
     const taskId = Date.now().toString();
   
-    // Authenticate with Google Sheets API
+    // Decode the base64-encoded service account key
+    const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+
+    if (!serviceAccountKey) {
+        return NextResponse.json({ error: 'Service account key not provided' }, { status: 500 });
+    }
+
+    const decodedKey = JSON.parse(
+        Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+    );
+
+    // Authenticate with Google Sheets API using the decoded credentials
     const auth = new google.auth.GoogleAuth({
-      keyFile: path.join(process.cwd(), 'config', 'service-account.json'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        credentials: decodedKey,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
     });
   
     const sheets = google.sheets({ version: 'v4', auth });
