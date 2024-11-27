@@ -30,7 +30,6 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   const startTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    // Fetch the task details from the API
     const fetchTask = async () => {
       try {
         const res = await fetch(`/api/tasks/${params.id}`);
@@ -47,7 +46,6 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   
     fetchTask();
   }, [params.id]);
-  
 
   useEffect(() => {
     // Reset start time when the question changes

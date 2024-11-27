@@ -2,7 +2,6 @@
 
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import path from 'path';
 
 export async function GET(
   request: Request,
@@ -10,7 +9,7 @@ export async function GET(
 ) {
   const taskId = params.id;
 
-  // Decode the base64-encoded service account key
+  // Authenticate with Google Sheets API
   const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 
   if (!serviceAccountKey) {
@@ -21,7 +20,6 @@ export async function GET(
     Buffer.from(serviceAccountKey, 'base64').toString('utf8')
   );
 
-  // Authenticate with Google Sheets API using the decoded credentials
   const auth = new google.auth.GoogleAuth({
     credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -44,33 +42,36 @@ export async function GET(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    const [id, title, description, assignedToStr] = taskRow;
-    const assignedTo = assignedToStr.split(',').map((group: string) => group.trim());
+    const [id, title, description, questionsStr] = taskRow;
 
-    // Fetch questions
-    const questionsRes = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Questions!A:C',
-    });
-    const questionsRows = questionsRes.data.values || [];
-
-    const questions = questionsRows
-      .filter((row) => row[0] === taskId)
-      .map((row) => ({ id: row[1], text: row[2] }));
+    // Split the questions string by '|' and map to Question objects
+    const questions = questionsStr
+      ? questionsStr.split('|').map((text: string, index: number) => ({
+          id: `${id}-${index + 1}`,
+          text: text.trim(),
+        }))
+      : [];
 
     const task = {
       id,
       title,
       description,
-      assignedTo,
       questions,
     };
 
     return NextResponse.json(task);
   } catch (error) {
     console.error('Error fetching task:', error);
+
+    let errorMessage = 'An unknown error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
     return NextResponse.json(
-      { error: 'Error fetching task' },
+      { error: 'Error fetching task', details: errorMessage },
       { status: 500 }
     );
   }

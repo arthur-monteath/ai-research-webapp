@@ -14,7 +14,6 @@ export default function StudentDashboard() {
       id: '1', 
       title: 'Math Quiz', 
       description: 'Complete the algebra quiz', 
-      assignedTo: ['Group A'],
       questions: [
         { id: '1', text: 'What is 2 + 2?' },
         { id: '2', text: 'Solve for x: 2x + 3 = 7' }
@@ -24,7 +23,6 @@ export default function StudentDashboard() {
       id: '2', 
       title: 'History Essay', 
       description: 'Write an essay on World War II', 
-      assignedTo: ['Group A'],
       questions: [
         { id: '1', text: 'What year did World War II start?' },
         { id: '2', text: 'Name three major Allied powers.' }
@@ -33,8 +31,7 @@ export default function StudentDashboard() {
     { 
       id: '3', 
       title: 'Science Project', 
-      description: 'Create a model of the solar system', 
-      assignedTo: ['Group A'],
+      description: 'Create a model of the solar system',
       questions: [
         { id: '1', text: 'Name all the planets in our solar system.' },
         { id: '2', text: 'What is the largest planet?' }

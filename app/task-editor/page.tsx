@@ -11,18 +11,17 @@ import { Task, Question } from '@/types'
 import { Trash2 } from 'lucide-react'
 
 export default function TaskEditor() {
-const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [newTask, setNewTask] = useState<Partial<Task>>({
     title: '',
     description: '',
-    assignedTo: [],
     questions: [],
   });
   const [newQuestion, setNewQuestion] = useState('');
 
+
   useEffect(() => {
-    // Fetch tasks from API
     const fetchTasks = async () => {
       try {
         const res = await fetch('/api/tasks');
@@ -39,13 +38,9 @@ const [tasks, setTasks] = useState<Task[]>([]);
     fetchTasks();
   }, []);
 
+
   const handleCreateTask = async () => {
-    if (
-      newTask.title &&
-      newTask.description &&
-      newTask.assignedTo &&
-      newTask.assignedTo.length > 0
-    ) {
+    if (newTask.title && newTask.description) {
       try {
         const response = await fetch('/api/tasks', {
           method: 'POST',
@@ -60,7 +55,7 @@ const [tasks, setTasks] = useState<Task[]>([]);
         if (response.ok) {
           // Refresh the tasks list
           setTasks([...tasks, { ...newTask, id: result.id } as Task]);
-          setNewTask({ title: '', description: '', assignedTo: [], questions: [] });
+          setNewTask({ title: '', description: '', questions: [] });
         } else {
           console.error('Error creating task:', result.error);
         }
@@ -68,8 +63,7 @@ const [tasks, setTasks] = useState<Task[]>([]);
         console.error('Error creating task:', error);
       }
     }
-  };
-  
+  }; 
 
   const handleUpdateTask = () => {
     if (editingTask) {
