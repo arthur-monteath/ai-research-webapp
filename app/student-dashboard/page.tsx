@@ -1,52 +1,84 @@
-'use client'
+// app/student-dashboard/page.tsx
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Layout from '@/components/layout'
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { Task } from '@/types'
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Layout from '@/components/layout';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
+import { Task } from '@/types';
 
 export default function StudentDashboard() {
-  const router = useRouter()
-  const [tasks, setTasks] = useState<Task[]>([
-    { 
-      id: '1', 
-      title: 'Math Quiz', 
-      description: 'Complete the algebra quiz', 
-      questions: [
-        { id: '1', text: 'What is 2 + 2?' },
-        { id: '2', text: 'Solve for x: 2x + 3 = 7' }
-      ]
-    },
-    { 
-      id: '2', 
-      title: 'History Essay', 
-      description: 'Write an essay on World War II', 
-      questions: [
-        { id: '1', text: 'What year did World War II start?' },
-        { id: '2', text: 'Name three major Allied powers.' }
-      ]
-    },
-    { 
-      id: '3', 
-      title: 'Science Project', 
-      description: 'Create a model of the solar system',
-      questions: [
-        { id: '1', text: 'Name all the planets in our solar system.' },
-        { id: '2', text: 'What is the largest planet?' }
-      ]
-    },
-  ])
+  const router = useRouter();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Obtain the student ID (replace with actual logic)
+  const studentId = 'P001'; // Replace this with the actual student ID
+
+  useEffect(() => {
+    const fetchStudentTasks = async () => {
+      try {
+        const res = await fetch(`/api/students/${studentId}/tasks`);
+        if (res.ok) {
+          const data = await res.json();
+          setTasks(data.tasks);
+        } else {
+          const errorData = await res.json();
+          setError(errorData.error || 'Failed to fetch tasks');
+        }
+      } catch (err) {
+        console.error('Error fetching student tasks:', err);
+        setError('An error occurred while fetching tasks');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentTasks();
+  }, [studentId]);
 
   const handleStartTask = (taskId: string) => {
-    router.push(`/task/${taskId}`)
+    router.push(`/task/${taskId}`);
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <p>Loading tasks...</p>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <p>Error: {error}</p>
+      </Layout>
+    );
+  }
+
+  if (tasks.length === 0) {
+    return (
+      <Layout>
+        <p>No tasks assigned to you at this time.</p>
+      </Layout>
+    );
   }
 
   return (
     <Layout>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tasks.map(task => (
+        {tasks.map((task) => (
           <Card key={task.id}>
             <CardHeader>
               <CardTitle>{task.title}</CardTitle>
@@ -61,6 +93,5 @@ export default function StudentDashboard() {
         ))}
       </div>
     </Layout>
-  )
+  );
 }
-

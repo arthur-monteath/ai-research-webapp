@@ -1,4 +1,4 @@
-// pages/task/[id].tsx
+// app/task/[id]/page.tsx
 
 'use client';
 
@@ -28,6 +28,8 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   >([]);
   const [chatInput, setChatInput] = useState('');
   const startTimeRef = useRef<number>(Date.now());
+  const [isLoading, setIsLoading] = useState(false);
+  const [controller, setController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     const fetchTask = async () => {
@@ -40,10 +42,14 @@ export default function TaskPage({ params }: { params: { id: string } }) {
           console.error('Failed to fetch task');
         }
       } catch (error) {
-        console.error('Error fetching task:', error);
+        if (error instanceof Error) {
+          console.error('Error fetching task:', error.message);
+        } else {
+          console.error('Unexpected error fetching task:', error);
+        }
       }
     };
-  
+
     fetchTask();
   }, [params.id]);
 
@@ -54,14 +60,65 @@ export default function TaskPage({ params }: { params: { id: string } }) {
 
   const handleSendMessage = async () => {
     if (chatInput.trim()) {
-      setChatMessages([...chatMessages, { role: 'user', content: chatInput }]);
+      const newUserMessage = { role: 'user' as const, content: chatInput };
+      const updatedMessages = [...chatMessages, newUserMessage];
+      setChatMessages(updatedMessages);
       setChatInput('');
+      setIsLoading(true);
 
-      // In a real app, you'd send the message to an AI API and get a response
-      const aiResponse = "I'm an AI assistant. How can I help you with this question?";
-      setTimeout(() => {
-        setChatMessages((prev) => [...prev, { role: 'assistant', content: aiResponse }]);
-      }, 1000);
+      // AbortController to cancel the request if needed
+      const abortController = new AbortController();
+      setController(abortController);
+
+      try {
+        const response = await fetch('/api/gpt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messages: updatedMessages }),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to get response from AI assistant');
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('Failed to read response body');
+        }
+
+        const decoder = new TextDecoder();
+        let assistantMessage = { role: 'assistant' as const, content: '' };
+        setChatMessages((prev) => [...prev, assistantMessage]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          assistantMessage.content += chunk;
+          // Update the last message in chatMessages
+          setChatMessages((prevMessages) => {
+            const updatedMessages = [...prevMessages];
+            updatedMessages[updatedMessages.length - 1] = assistantMessage;
+            return updatedMessages;
+          });
+        }
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            console.log('Fetch aborted');
+          } else {
+            console.error('Error:', error.message);
+          }
+        } else {
+          console.error('Unexpected error:', error);
+        }
+      } finally {
+        setIsLoading(false);
+        setController(null);
+      }
     }
   };
 
@@ -95,7 +152,11 @@ export default function TaskPage({ params }: { params: { id: string } }) {
           console.error('Error submitting data:', result.error);
         }
       } catch (error) {
-        console.error('Network error:', error);
+        if (error instanceof Error) {
+          console.error('Network error:', error.message);
+        } else {
+          console.error('Unexpected network error:', error);
+        }
       }
 
       if (currentQuestionIndex < task.questions.length - 1) {
@@ -109,8 +170,21 @@ export default function TaskPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (!isLoading) {
+        handleSendMessage();
+      }
+    }
+  };
+
   if (!task) {
-    return <div>Loading...</div>;
+    return (
+      <Layout>
+        <div>Loading...</div>
+      </Layout>
+    );
   }
 
   return (
@@ -137,6 +211,13 @@ export default function TaskPage({ params }: { params: { id: string } }) {
                 </span>
               </div>
             ))}
+            {isLoading && (
+              <div className="mb-4 text-left">
+                <span className="inline-block p-2 rounded-lg bg-gray-100 animate-pulse">
+                  AI Assistant is typing...
+                </span>
+              </div>
+            )}
           </CardContent>
           <CardFooter>
             <div className="flex w-full">
@@ -145,8 +226,10 @@ export default function TaskPage({ params }: { params: { id: string } }) {
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Ask the AI assistant..."
                 className="flex-grow"
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
               />
-              <Button onClick={handleSendMessage} className="ml-2">
+              <Button onClick={handleSendMessage} className="ml-2" disabled={isLoading}>
                 Send
               </Button>
             </div>
