@@ -128,7 +128,8 @@ export default function TaskPage({ params }: { params: { id: string } }) {
 
       // Prepare data to send
       const data = {
-        studentId: 'P001', // Replace with actual student ID
+        studentId: 'X', // Replace with actual student ID
+        taskId: task.id,
         questionId: task.questions[currentQuestionIndex].id,
         timeTaken: timeTaken / 1000, // Convert to seconds
         answer,
@@ -190,7 +191,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   return (
     <Layout>
       <div className="grid grid-cols-2 gap-6">
-        <Card className="h-[calc(100vh-100px)] flex flex-col">
+        <Card className="h-[calc(100vh-140px)] flex flex-col">
           <CardHeader>
             <CardTitle>AI Assistant</CardTitle>
           </CardHeader>
@@ -236,7 +237,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
           </CardFooter>
         </Card>
 
-        <Card className="h-[calc(100vh-100px)] flex flex-col">
+        <Card className="h-[calc(100vh-140px)] flex flex-col">
           <CardHeader>
             <CardTitle>{task.title}</CardTitle>
             <CardDescription>{task.description}</CardDescription>
