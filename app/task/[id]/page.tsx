@@ -33,6 +33,8 @@ type ChatMessage = {
   content: string;
 };
 
+// No need for CodeBlock component
+
 export default function TaskPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
@@ -231,18 +233,19 @@ export default function TaskPage({ params }: { params: { id: string } }) {
                   }`}
                 >
                   <ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  components={{
-    a: ({ node, ...props }) => (
-      <a className="text-blue-500 hover:underline" {...props}>
-        {props.children}
-      </a>
-    ),
-    // Add more custom components as needed
-  }}
->
-  {message.content}
-</ReactMarkdown>
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      // No code component needed
+                      a: ({ node, ...props }) => (
+                        <a className="text-blue-500 hover:underline" {...props}>
+                          {props.children}
+                        </a>
+                      ),
+                      // Add more custom components as needed
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
                 </span>
               </div>
             ))}
@@ -264,7 +267,11 @@ export default function TaskPage({ params }: { params: { id: string } }) {
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
               />
-              <Button onClick={handleSendMessage} className="ml-2" disabled={isLoading}>
+              <Button
+                onClick={handleSendMessage}
+                className="ml-2"
+                disabled={isLoading}
+              >
                 Send
               </Button>
             </div>
@@ -280,7 +287,22 @@ export default function TaskPage({ params }: { params: { id: string } }) {
             <h3 className="text-lg font-semibold mb-2">
               Question {currentQuestionIndex + 1}:
             </h3>
-            <p className="mb-4">{task.questions[currentQuestionIndex].text}</p>
+            <div className="mb-4">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // No code component needed
+                  a: ({ node, ...props }) => (
+                    <a className="text-blue-500 hover:underline" {...props}>
+                      {props.children}
+                    </a>
+                  ),
+                  // Add more custom components as needed
+                }}
+              >
+                {task.questions[currentQuestionIndex].text}
+              </ReactMarkdown>
+            </div>
             <Textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
