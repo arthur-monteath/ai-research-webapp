@@ -231,34 +231,18 @@ export default function TaskPage({ params }: { params: { id: string } }) {
                   }`}
                 >
                   <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      code({ node, inline, className, children, ...props }) {
-                        return !inline ? (
-                          <pre
-                            className="bg-gray-800 text-gray-100 p-2 rounded-md overflow-x-auto"
-                            {...props}
-                          >
-                            <code>{children}</code>
-                          </pre>
-                        ) : (
-                          <code className="bg-gray-200 p-1 rounded" {...props}>
-                            {children}
-                          </code>
-                        );
-                      },
-                      a({ node, ...props }) {
-                        return (
-                          <a className="text-blue-500 hover:underline" {...props}>
-                            {props.children}
-                          </a>
-                        );
-                      },
-                      // Add more custom components as needed
-                    }}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
+  remarkPlugins={[remarkGfm]}
+  components={{
+    a: ({ node, ...props }) => (
+      <a className="text-blue-500 hover:underline" {...props}>
+        {props.children}
+      </a>
+    ),
+    // Add more custom components as needed
+  }}
+>
+  {message.content}
+</ReactMarkdown>
                 </span>
               </div>
             ))}
