@@ -22,18 +22,33 @@ import { Task } from '@/types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+// Define types
+type Message = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export default function TaskPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState('');
-  const [chatMessages, setChatMessages] = useState<
-    { role: 'user' | 'assistant'; content: string }[]
-  >([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const startTimeRef = useRef<number>(Date.now());
   const [isLoading, setIsLoading] = useState(false);
   const [controller, setController] = useState<AbortController | null>(null);
+
+  // Define the system message
+  const systemMessage: Message = {
+    role: 'system',
+    content: 'Please do not use LaTeX in your responses.',
+  };
 
   useEffect(() => {
     const fetchTask = async () => {
@@ -64,11 +79,14 @@ export default function TaskPage({ params }: { params: { id: string } }) {
 
   const handleSendMessage = async () => {
     if (chatInput.trim()) {
-      const newUserMessage = { role: 'user' as const, content: chatInput };
-      const updatedMessages = [...chatMessages, newUserMessage];
-      setChatMessages(updatedMessages);
+      const newUserMessage: ChatMessage = { role: 'user', content: chatInput };
+      const updatedChatMessages = [...chatMessages, newUserMessage];
+      setChatMessages(updatedChatMessages);
       setChatInput('');
       setIsLoading(true);
+
+      // Prepare messages to send, including the system message
+      const messagesToSend: Message[] = [systemMessage, ...updatedChatMessages];
 
       // AbortController to cancel the request if needed
       const abortController = new AbortController();
@@ -80,7 +98,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ messages: updatedMessages }),
+          body: JSON.stringify({ messages: messagesToSend }),
           signal: abortController.signal,
         });
 
@@ -94,7 +112,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
         }
 
         const decoder = new TextDecoder();
-        let assistantMessage = { role: 'assistant' as const, content: '' };
+        let assistantMessage: ChatMessage = { role: 'assistant', content: '' };
         setChatMessages((prev) => [...prev, assistantMessage]);
 
         while (true) {
