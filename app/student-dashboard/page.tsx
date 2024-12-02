@@ -101,7 +101,7 @@ export default function StudentDashboard() {
           // Determine if Task 3 should be locked
           let isLocked = false;
 
-          if (task.id === '3' && isTask2Assigned) {
+          if (task.id === '3' && isTask2Assigned && studentId != "student1") {
             isLocked = true;
           }
 
