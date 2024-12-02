@@ -75,22 +75,40 @@ export default function StudentDashboard() {
     );
   }
 
+  // Check if Task 2 is still assigned
+  const isTask2Assigned = tasks.some((task) => task.id === '2');
+
   return (
     <Layout>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tasks.map((task) => (
-          <Card key={task.id}>
-            <CardHeader>
-              <CardTitle>{task.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>{task.description}</CardDescription>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={() => handleStartTask(task.id)}>Start Task</Button>
-            </CardFooter>
-          </Card>
-        ))}
+        {tasks.map((task) => {
+          // Determine if Task 3 should be locked
+          let isLocked = false;
+
+          if (task.id === '3' && isTask2Assigned) {
+            isLocked = true;
+          }
+
+          return (
+            <Card key={task.id}>
+              <CardHeader>
+                <CardTitle>{task.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription>{task.description}</CardDescription>
+              </CardContent>
+              <CardFooter>
+                <Button
+                  onClick={() => handleStartTask(task.id)}
+                  disabled={isLocked}
+                  title={isLocked ? 'Complete Task 2 to unlock this task' : ''}
+                >
+                  {isLocked ? 'Locked' : 'Start Task'}
+                </Button>
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
     </Layout>
   );
