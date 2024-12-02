@@ -35,7 +35,7 @@ type ChatMessage = {
 
 // No need for CodeBlock component
 
-export default function TaskPage({ params }: { params: { id: string } }) {
+export default function TaskPage({ params }: { params: { task: string } }) {
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -55,7 +55,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchTask = async () => {
       try {
-        const res = await fetch(`/api/tasks/${params.id}`);
+        const res = await fetch(`/api/tasks/${params.task}`);
         if (res.ok) {
           const taskData: Task = await res.json();
           setTask(taskData);
@@ -72,7 +72,7 @@ export default function TaskPage({ params }: { params: { id: string } }) {
     };
 
     fetchTask();
-  }, [params.id]);
+  }, [params.task]);
 
   useEffect(() => {
     // Reset start time when the question changes

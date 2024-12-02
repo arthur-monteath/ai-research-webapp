@@ -22,10 +22,19 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Obtain the student ID (replace with actual logic)
-  const studentId = 'P001'; // Replace this with the actual student ID
+  // Obtain the student ID and name from sessionStorage
+  const studentId =
+    typeof window !== 'undefined' ? sessionStorage.getItem('studentId') : null;
+  const studentName =
+    typeof window !== 'undefined' ? sessionStorage.getItem('studentName') : null;
 
   useEffect(() => {
+    if (!studentId) {
+      // If no student ID, redirect to login page
+      router.push('/login');
+      return;
+    }
+
     const fetchStudentTasks = async () => {
       try {
         const res = await fetch(`/api/students/${studentId}/tasks`);
@@ -45,7 +54,7 @@ export default function StudentDashboard() {
     };
 
     fetchStudentTasks();
-  }, [studentId]);
+  }, [studentId, router]);
 
   const handleStartTask = (taskId: string) => {
     router.push(`/task/${taskId}`);
@@ -80,6 +89,13 @@ export default function StudentDashboard() {
 
   return (
     <Layout>
+      {/* Display the welcome message */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">
+          Welcome{studentName ? `, ${studentName}` : ''}!
+        </h1>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tasks.map((task) => {
           // Determine if Task 3 should be locked
@@ -90,7 +106,7 @@ export default function StudentDashboard() {
           }
 
           return (
-            <Card key={task.id}>
+            <Card key={task.id} className={isLocked ? 'opacity-50' : ''}>
               <CardHeader>
                 <CardTitle>{task.title}</CardTitle>
               </CardHeader>
@@ -101,7 +117,9 @@ export default function StudentDashboard() {
                 <Button
                   onClick={() => handleStartTask(task.id)}
                   disabled={isLocked}
-                  title={isLocked ? 'Complete Task 2 to unlock this task' : ''}
+                  title={
+                    isLocked ? 'Complete Task 2 to unlock this task' : ''
+                  }
                 >
                   {isLocked ? 'Locked' : 'Start Task'}
                 </Button>

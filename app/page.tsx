@@ -1,42 +1,51 @@
-'use client'
+// app/login/page.tsx
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
 export default function LoginPage() {
-  const [id, setId] = useState('')
-  const [error, setError] = useState('')
-  const router = useRouter()
+  const [id, setId] = useState('');
+  const [error, setError] = useState('');
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError('');
 
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
         if (data.role === 'teacher') {
-          router.push('/task-editor')
-        } else {
-          router.push(`/student-dashboard?group=${data.group}`)
+          router.push('/task-editor');
+        } else if (data.role === 'student') {
+          // Store student information in session storage or context as needed
+          // For example, you might set the student ID, name, and group in session storage
+          sessionStorage.setItem('studentId', id);
+          sessionStorage.setItem('studentName', data.name);
+          sessionStorage.setItem('studentGroup', data.group);
+
+          router.push('/student-dashboard');
         }
       } else {
-        setError(data.error || 'Login failed')
+        setError(data.error || 'Login failed');
       }
     } catch (error) {
-      setError('An error occurred. Please try again.')
+      console.error('Login error:', error);
+      setError('An error occurred. Please try again.');
     }
-  }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -59,11 +68,11 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col">
-            <Button className="w-full">Login</Button>
+            <Button className="w-full" type="submit">Login</Button>
             {error && <p className="text-red-500 mt-2">{error}</p>}
           </CardFooter>
         </form>
       </Card>
     </div>
-  )
+  );
 }
