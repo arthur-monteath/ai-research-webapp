@@ -16,17 +16,26 @@ export async function POST(request: Request) {
   }
 
   // Authenticate with Google Sheets API
+  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!serviceAccountKey) {
+    return NextResponse.json(
+      { error: 'Service account key not provided' },
+      { status: 500 }
+    );
+  }
+
+  const decodedKey = JSON.parse(
+    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
+  );
+
   const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
+    credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 
   const sheets = google.sheets({ version: 'v4', auth });
 
-  const spreadsheetId = process.env.SPREADSHEET_ID;
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 
   try {
     // Fetch data from the "Data" sheet
