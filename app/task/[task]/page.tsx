@@ -23,6 +23,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import { AutosizeTextarea } from '@/components/autosizeTextArea';
 
 type Message = {
   role: 'system' | 'user' | 'assistant';
@@ -52,7 +53,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   const systemMessage: Message = {
     role: 'system',
     content:
-      'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`. Remember to escape any `$` sign.',
+      'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`. You NEVER write `$` to represent ANY value, represent money with `USD` or other currencies.',
   };
 
   const studentId =
@@ -247,7 +248,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
     }
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       if (!isLoading) {
@@ -324,12 +325,14 @@ export default function TaskPage({ params }: { params: { task: string } }) {
             </CardContent>
             <CardFooter>
               <div className="flex w-full">
-                <Input
+                <AutosizeTextarea
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="Ask the AI assistant..."
                   className="flex-grow"
-                  onKeyDown={handleKeyDown}
+                  onKeyDownCapture={handleKeyDown}
+                  minHeight={32}
+                  maxHeight={450}
                   disabled={isLoading}
                 />
                 <Button
@@ -384,11 +387,13 @@ export default function TaskPage({ params }: { params: { task: string } }) {
                 {task.questions[currentQuestionIndex].text}
               </ReactMarkdown>
             </div>
-            <Textarea
+            <AutosizeTextarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type your answer here..."
-              className="h-40"
+              minHeight={160}
+              maxHeight={450}
+              
             />
           </CardContent>
           <CardFooter>
