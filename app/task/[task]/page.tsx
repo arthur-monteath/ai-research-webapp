@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 type Message = {
   role: 'system' | 'user' | 'assistant';
@@ -44,9 +45,14 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   const [isLoading, setIsLoading] = useState(false);
   const [controller, setController] = useState<AbortController | null>(null);
 
+  // New state variables
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const systemMessage: Message = {
     role: 'system',
-    content: 'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`.',
+    content:
+      'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`.',
   };
 
   const studentId =
@@ -79,9 +85,17 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   useEffect(() => {
     // Reset start time when the question changes
     startTimeRef.current = Date.now();
+    // Reset confirmation state when moving to the next question
+    setIsConfirming(false);
   }, [currentQuestionIndex]);
 
+  // Reset confirmation state when the answer changes
+  useEffect(() => {
+    setIsConfirming(false);
+  }, [answer]);
+
   const handleSendMessage = async () => {
+    // ... [handleSendMessage code remains the same]
     if (chatInput.trim()) {
       const newUserMessage: ChatMessage = { role: 'user', content: chatInput };
       const updatedChatMessages = [...chatMessages, newUserMessage];
@@ -149,9 +163,22 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   };
 
   const handleSubmitAnswer = async () => {
+    if (isSubmitting) {
+      // Prevent multiple submissions
+      return;
+    }
+
+    if (!isConfirming) {
+      // First click: ask for confirmation
+      setIsConfirming(true);
+      return;
+    }
+
     if (answer.trim() && task) {
+      setIsSubmitting(true); // Start submitting
+
       const timeTaken = Date.now() - startTimeRef.current;
-  
+
       // Prepare data to send
       const data = {
         studentId: studentId,
@@ -161,7 +188,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
         answer,
         chatLogs: chatMessages,
       };
-  
+
       try {
         const response = await fetch('/api/submit-response', {
           method: 'POST',
@@ -170,15 +197,15 @@ export default function TaskPage({ params }: { params: { task: string } }) {
           },
           body: JSON.stringify(data),
         });
-  
+
         const result = await response.json();
-  
+
         if (response.ok) {
           console.log('Data submitted successfully:', result);
         } else {
           console.error('Error submitting data:', result.error);
         }
-  
+
         // Check if it's the last question
         if (currentQuestionIndex >= task.questions.length - 1) {
           // Task completed, unassign task from student
@@ -188,7 +215,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
               method: 'POST',
             }
           );
-  
+
           if (unassignResponse.ok) {
             console.log('Task unassigned from student');
           } else {
@@ -198,7 +225,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
               unassignResult.error || 'Unknown error'
             );
           }
-  
+
           // Redirect to student dashboard
           router.push('/student-dashboard');
         } else {
@@ -206,6 +233,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
           setCurrentQuestionIndex(currentQuestionIndex + 1);
           setAnswer('');
           setChatMessages([]);
+          setIsConfirming(false);
         }
       } catch (error) {
         if (error instanceof Error) {
@@ -213,9 +241,11 @@ export default function TaskPage({ params }: { params: { task: string } }) {
         } else {
           console.error('Unexpected network error:', error);
         }
+      } finally {
+        setIsSubmitting(false); // Submission complete
       }
     }
-  };  
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -234,78 +264,90 @@ export default function TaskPage({ params }: { params: { task: string } }) {
     );
   }
 
+  // Determine button text and style
+  let buttonText = currentQuestionIndex < task.questions.length - 1 ? 'Next Question' : 'Finish Task';
+  if (isConfirming) {
+    buttonText = 'Click Again to Confirm';
+  }
+  if (isSubmitting) {
+    buttonText = 'Submitting Answer...';
+  }
+
+  const buttonClasses = `w-full ${
+    isConfirming ? 'bg-yellow-500 hover:bg-yellow-600' : ''
+  }`;
+
   return (
     <Layout>
-        <div className={`grid ${studentGroup != "A" ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {studentGroup != "A" && (
-            <Card className="h-[calc(100vh-140px)] flex flex-col">
-              <CardHeader>
-                <CardTitle>AI Assistant</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-grow overflow-auto">
-                {chatMessages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`mb-4 ${
-                      message.role === 'user' ? 'text-right' : 'text-left'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block p-2 rounded-lg text-left break-words whitespace-pre-wrap ${
-                        message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
-                      }`}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                          a: ({ node, ...props }) => (
-                            <a className="text-blue-500 hover:underline" {...props}>
-                              {props.children}
-                            </a>
-                          ),
-                          // Add more custom components as needed
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </span>
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="mb-4 text-left">
-                    <span className="inline-block p-2 rounded-lg bg-gray-100 animate-pulse">
-                      AI Assistant is typing...
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <div className="flex w-full">
-                  <Input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Ask the AI assistant..."
-                    className="flex-grow"
-                    onKeyDown={handleKeyDown}
-                    disabled={isLoading}
-                  />
-                  <Button
-                    onClick={handleSendMessage}
-                    className="ml-2"
-                    disabled={isLoading}
-                  >
-                    Send
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          )}
-
+      <div className={`grid ${studentGroup !== 'A' ? 'grid-cols-2 gap-6' : 'grid-cols-1'}`}>
+        {studentGroup !== 'A' && (
           <Card className="h-[calc(100vh-140px)] flex flex-col">
             <CardHeader>
-              <CardTitle>{task.title}</CardTitle>
-              <CardDescription>
+              <CardTitle>AI Assistant</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-grow overflow-auto">
+              {chatMessages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`mb-4 ${
+                    message.role === 'user' ? 'text-right' : 'text-left'
+                  }`}
+                >
+                  <span
+                    className={`inline-block p-2 rounded-lg text-left break-words whitespace-pre-wrap ${
+                      message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
+                    }`}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a className="text-blue-500 hover:underline" {...props}>
+                            {props.children}
+                          </a>
+                        ),
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </span>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="mb-4 text-left">
+                  <span className="inline-block p-2 rounded-lg bg-gray-100 animate-pulse">
+                    AI Assistant is typing...
+                  </span>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter>
+              <div className="flex w-full">
+                <Input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask the AI assistant..."
+                  className="flex-grow"
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  className="ml-2"
+                  disabled={isLoading}
+                >
+                  Send
+                </Button>
+              </div>
+            </CardFooter>
+          </Card>
+        )}
+
+        <Card className="h-[calc(100vh-140px)] flex flex-col">
+          <CardHeader>
+            <CardTitle>{task.title}</CardTitle>
+            <CardDescription>
               <div className="prose max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
@@ -316,51 +358,50 @@ export default function TaskPage({ params }: { params: { task: string } }) {
                         {props.children}
                       </a>
                     ),
-                    // Add more custom components as needed
                   }}
                 >
                   {task.description}
                 </ReactMarkdown>
               </div>
-
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow overflow-auto">
-              <h3 className="text-lg font-semibold mb-2">
-                Question {currentQuestionIndex + 1}:
-              </h3>
-              <div className="mb-4">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                  components={{
-                    a: ({ node, ...props }) => (
-                      <a className="text-blue-500 hover:underline" {...props}>
-                        {props.children}
-                      </a>
-                    ),
-                    // Add more custom components as needed
-                  }}
-                >
-                  {task.questions[currentQuestionIndex].text}
-                </ReactMarkdown>
-              </div>
-              <Textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Type your answer here..."
-                className="h-40"
-              />
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleSubmitAnswer} className="w-full">
-                {currentQuestionIndex < task.questions.length - 1
-                  ? 'Next Question'
-                  : 'Finish Task'}
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex-grow overflow-auto">
+            <h3 className="text-lg font-semibold mb-2">
+              Question {currentQuestionIndex + 1}:
+            </h3>
+            <div className="mb-4 prose max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  a: ({ node, ...props }) => (
+                    <a className="text-blue-500 hover:underline" {...props}>
+                      {props.children}
+                    </a>
+                  ),
+                }}
+              >
+                {task.questions[currentQuestionIndex].text}
+              </ReactMarkdown>
+            </div>
+            <Textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Type your answer here..."
+              className="h-40"
+            />
+          </CardContent>
+          <CardFooter>
+            <Button
+              onClick={handleSubmitAnswer}
+              className={buttonClasses}
+              disabled={isSubmitting}
+            >
+              {buttonText}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </Layout>
   );
 }

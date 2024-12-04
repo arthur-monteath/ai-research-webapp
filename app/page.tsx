@@ -6,16 +6,25 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
 
 export default function LoginPage() {
   const [id, setId] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // New state variable
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true); // Disable the button
 
     try {
       const response = await fetch('/api/auth', {
@@ -31,7 +40,6 @@ export default function LoginPage() {
           router.push('/task-editor');
         } else if (data.role === 'student') {
           // Store student information in session storage or context as needed
-          // For example, you might set the student ID, name, and group in session storage
           sessionStorage.setItem('studentId', id);
           sessionStorage.setItem('studentName', data.name);
           sessionStorage.setItem('studentGroup', data.group);
@@ -40,10 +48,12 @@ export default function LoginPage() {
         }
       } else {
         setError(data.error || 'Login failed');
+        setIsLoading(false); // Re-enable the button
       }
     } catch (error) {
       console.error('Login error:', error);
       setError('An error occurred. Please try again.');
+      setIsLoading(false); // Re-enable the button
     }
   };
 
@@ -52,7 +62,9 @@ export default function LoginPage() {
       <Card className="w-[350px]">
         <CardHeader>
           <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your ID to access the application</CardDescription>
+          <CardDescription>
+            Enter your ID to access the application
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent>
@@ -63,12 +75,15 @@ export default function LoginPage() {
                   placeholder="Enter your ID"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
+                  disabled={isLoading} // Disable input when loading
                 />
               </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col">
-            <Button className="w-full" type="submit">Login</Button>
+            <Button className="w-full" type="submit" disabled={isLoading}>
+              {isLoading ? 'Logging in...' : 'Login'}
+            </Button>
             {error && <p className="text-red-500 mt-2">{error}</p>}
           </CardFooter>
         </form>
