@@ -24,11 +24,11 @@ export async function POST(
 
   const auth = new google.auth.GoogleAuth({
     credentials: decodedKey,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 
   const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = process.env.SPREADSHEET_ID;
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 
   try {
     // Fetch current task assignments
