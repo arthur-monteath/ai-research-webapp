@@ -10,11 +10,15 @@ import {
   Card,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardContent,
   CardFooter,
 } from '@/components/ui/card';
 import { Task } from '@/types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css'; // Import KaTeX CSS
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -101,7 +105,7 @@ export default function StudentDashboard() {
           // Determine if Task 3 should be locked
           let isLocked = false;
 
-          if (task.id === '3' && isTask2Assigned && studentId != "student1") {
+          if (task.id === '3' && isTask2Assigned && studentId !== 'student1') {
             isLocked = true;
           }
 
@@ -111,7 +115,25 @@ export default function StudentDashboard() {
                 <CardTitle>{task.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>{task.description}</CardDescription>
+                <div className="prose max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={{
+                      a: ({ node, ...props }) => (
+                        <a
+                          className="text-blue-500 hover:underline"
+                          {...props}
+                        >
+                          {props.children}
+                        </a>
+                      ),
+                      // Add more custom components as needed
+                    }}
+                  >
+                    {task.description}
+                  </ReactMarkdown>
+                </div>
               </CardContent>
               <CardFooter>
                 <Button
