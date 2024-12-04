@@ -52,7 +52,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   const systemMessage: Message = {
     role: 'system',
     content:
-      'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`.',
+      'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`. Remember to escape any `$` sign.',
   };
 
   const studentId =
