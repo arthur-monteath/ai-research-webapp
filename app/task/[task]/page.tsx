@@ -22,9 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css'; // Import KaTeX CSS
 
-// Define types
 type Message = {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -153,17 +151,17 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   const handleSubmitAnswer = async () => {
     if (answer.trim() && task) {
       const timeTaken = Date.now() - startTimeRef.current;
-
+  
       // Prepare data to send
       const data = {
-        studentId: studentId, // Replace with actual student ID
+        studentId: studentId,
         taskId: task.id,
         questionId: task.questions[currentQuestionIndex].id,
         timeTaken: timeTaken / 1000, // Convert to seconds
         answer,
         chatLogs: chatMessages,
       };
-
+  
       try {
         const response = await fetch('/api/submit-response', {
           method: 'POST',
@@ -172,13 +170,42 @@ export default function TaskPage({ params }: { params: { task: string } }) {
           },
           body: JSON.stringify(data),
         });
-
+  
         const result = await response.json();
-
+  
         if (response.ok) {
           console.log('Data submitted successfully:', result);
         } else {
           console.error('Error submitting data:', result.error);
+        }
+  
+        // Check if it's the last question
+        if (currentQuestionIndex >= task.questions.length - 1) {
+          // Task completed, unassign task from student
+          const unassignResponse = await fetch(
+            `/api/students/${studentId}/tasks/${task.id}/unassign`,
+            {
+              method: 'POST',
+            }
+          );
+  
+          if (unassignResponse.ok) {
+            console.log('Task unassigned from student');
+          } else {
+            const unassignResult = await unassignResponse.json();
+            console.error(
+              'Error unassigning task:',
+              unassignResult.error || 'Unknown error'
+            );
+          }
+  
+          // Redirect to student dashboard
+          router.push('/student-dashboard');
+        } else {
+          // Move to next question
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          setAnswer('');
+          setChatMessages([]);
         }
       } catch (error) {
         if (error instanceof Error) {
@@ -187,17 +214,8 @@ export default function TaskPage({ params }: { params: { task: string } }) {
           console.error('Unexpected network error:', error);
         }
       }
-
-      if (currentQuestionIndex < task.questions.length - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-        setAnswer('');
-        setChatMessages([]);
-      } else {
-        // Task completed
-        router.push('/student-dashboard');
-      }
     }
-  };
+  };  
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
