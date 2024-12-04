@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       // Split the questions string by '|' and map to Question objects
       const questions = questionsStr
         ? questionsStr.split('|').map((text: string, index: number) => ({
-            id: `${id}-${index + 1}`, // Create a unique id for each question
+            id: `${index + 1}`, // Create a unique id for each question
             text: text.trim(),
           }))
         : [];
