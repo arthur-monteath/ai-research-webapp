@@ -1,6 +1,7 @@
 import LogoutButton from '@/components/logoutButton'
 import localFont from "next/font/local";
 import { Metadata } from 'next';
+import 'katex/dist/katex.min.css';
 import "@/app/globals.css";
 
 const geistSans = localFont({

@@ -18,9 +18,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Task } from '@/types';
 
-// Import ReactMarkdown and remark-gfm
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css'; // Import KaTeX CSS
 
 // Define types
 type Message = {
@@ -33,8 +35,6 @@ type ChatMessage = {
   content: string;
 };
 
-// No need for CodeBlock component
-
 export default function TaskPage({ params }: { params: { task: string } }) {
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
@@ -46,11 +46,15 @@ export default function TaskPage({ params }: { params: { task: string } }) {
   const [isLoading, setIsLoading] = useState(false);
   const [controller, setController] = useState<AbortController | null>(null);
 
-  // Define the system message
   const systemMessage: Message = {
     role: 'system',
-    content: 'Please do not use LaTeX in your responses.',
+    content: 'You format all mathematical expressions using `$` for inline math and `$$` for block math, you DO NOT use `\\(`, `\\)`, `\\[`, or `\\]`.',
   };
+
+  const studentId =
+    typeof window !== 'undefined' ? sessionStorage.getItem('studentId') : null;
+  const studentGroup =
+    typeof window !== 'undefined' ? sessionStorage.getItem('studentGroup') : null;
 
   useEffect(() => {
     const fetchTask = async () => {
@@ -152,7 +156,7 @@ export default function TaskPage({ params }: { params: { task: string } }) {
 
       // Prepare data to send
       const data = {
-        studentId: 'X', // Replace with actual student ID
+        studentId: studentId, // Replace with actual student ID
         taskId: task.id,
         questionId: task.questions[currentQuestionIndex].id,
         timeTaken: timeTaken / 1000, // Convert to seconds
@@ -214,111 +218,156 @@ export default function TaskPage({ params }: { params: { task: string } }) {
 
   return (
     <Layout>
-      <div className="grid grid-cols-2 gap-6">
-        <Card className="h-[calc(100vh-140px)] flex flex-col">
-          <CardHeader>
-            <CardTitle>AI Assistant</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow overflow-auto">
-            {chatMessages.map((message, index) => (
-              <div
-                key={index}
-                className={`mb-4 ${
-                  message.role === 'user' ? 'text-right' : 'text-left'
-                }`}
-              >
-                <span
-                  className={`inline-block p-2 rounded-lg text-left break-words whitespace-pre-wrap ${
-                    message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
+      {studentGroup === 'A' ? (
+        <div className="grid grid-cols-1">
+          <Card className="h-[calc(100vh-140px)] flex flex-col">
+            <CardHeader>
+              <CardTitle>{task.title}</CardTitle>
+              <CardDescription>{task.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow">
+              <h3 className="text-lg font-semibold mb-2">
+                Question {currentQuestionIndex + 1}:
+              </h3>
+              <div className="mb-4">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a className="text-blue-500 hover:underline" {...props}>
+                        {props.children}
+                      </a>
+                    ),
+                    // Add more custom components as needed
+                  }}
+                >
+                  {task.questions[currentQuestionIndex].text}
+                </ReactMarkdown>
+              </div>
+              <Textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="Type your answer here..."
+                className="h-40"
+              />
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleSubmitAnswer} className="w-full">
+                {currentQuestionIndex < task.questions.length - 1
+                  ? 'Next Question'
+                  : 'Finish Task'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-6">
+          <Card className="h-[calc(100vh-140px)] flex flex-col">
+            <CardHeader>
+              <CardTitle>AI Assistant</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-grow overflow-auto">
+              {chatMessages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`mb-4 ${
+                    message.role === 'user' ? 'text-right' : 'text-left'
                   }`}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      // No code component needed
-                      a: ({ node, ...props }) => (
-                        <a className="text-blue-500 hover:underline" {...props}>
-                          {props.children}
-                        </a>
-                      ),
-                      // Add more custom components as needed
-                    }}
+                  <span
+                    className={`inline-block p-2 rounded-lg text-left break-words whitespace-pre-wrap ${
+                      message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
+                    }`}
                   >
-                    {message.content}
-                  </ReactMarkdown>
-                </span>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a className="text-blue-500 hover:underline" {...props}>
+                            {props.children}
+                          </a>
+                        ),
+                        // Add more custom components as needed
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </span>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="mb-4 text-left">
+                  <span className="inline-block p-2 rounded-lg bg-gray-100 animate-pulse">
+                    AI Assistant is typing...
+                  </span>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter>
+              <div className="flex w-full">
+                <Input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask the AI assistant..."
+                  className="flex-grow"
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                />
+                <Button
+                  onClick={handleSendMessage}
+                  className="ml-2"
+                  disabled={isLoading}
+                >
+                  Send
+                </Button>
               </div>
-            ))}
-            {isLoading && (
-              <div className="mb-4 text-left">
-                <span className="inline-block p-2 rounded-lg bg-gray-100 animate-pulse">
-                  AI Assistant is typing...
-                </span>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <div className="flex w-full">
-              <Input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask the AI assistant..."
-                className="flex-grow"
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-              />
-              <Button
-                onClick={handleSendMessage}
-                className="ml-2"
-                disabled={isLoading}
-              >
-                Send
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
+            </CardFooter>
+          </Card>
 
-        <Card className="h-[calc(100vh-140px)] flex flex-col">
-          <CardHeader>
-            <CardTitle>{task.title}</CardTitle>
-            <CardDescription>{task.description}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-grow">
-            <h3 className="text-lg font-semibold mb-2">
-              Question {currentQuestionIndex + 1}:
-            </h3>
-            <div className="mb-4">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  // No code component needed
-                  a: ({ node, ...props }) => (
-                    <a className="text-blue-500 hover:underline" {...props}>
-                      {props.children}
-                    </a>
-                  ),
-                  // Add more custom components as needed
-                }}
-              >
-                {task.questions[currentQuestionIndex].text}
-              </ReactMarkdown>
-            </div>
-            <Textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer here..."
-              className="h-40"
-            />
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleSubmitAnswer} className="w-full">
-              {currentQuestionIndex < task.questions.length - 1
-                ? 'Next Question'
-                : 'Finish Task'}
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+          <Card className="h-[calc(100vh-140px)] flex flex-col">
+            <CardHeader>
+              <CardTitle>{task.title}</CardTitle>
+              <CardDescription>{task.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow">
+              <h3 className="text-lg font-semibold mb-2">
+                Question {currentQuestionIndex + 1}:
+              </h3>
+              <div className="mb-4">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a className="text-blue-500 hover:underline" {...props}>
+                        {props.children}
+                      </a>
+                    ),
+                    // Add more custom components as needed
+                  }}
+                >
+                  {task.questions[currentQuestionIndex].text}
+                </ReactMarkdown>
+              </div>
+              <Textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="Type your answer here..."
+                className="h-40"
+              />
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleSubmitAnswer} className="w-full">
+                {currentQuestionIndex < task.questions.length - 1
+                  ? 'Next Question'
+                  : 'Finish Task'}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
     </Layout>
   );
 }
