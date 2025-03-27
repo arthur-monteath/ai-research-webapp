@@ -26,7 +26,7 @@ body {
     --secondary-foreground: 240 10% 10%;
     --muted: 240 5% 90%; /* Light gray */
     --muted-foreground: 240 10% 40%; /* Medium gray */
-    --accent: 330 80% 70%; /* Pinkish coral */
+    --accent: 200 70% 45%; /* Teal */
     --accent-foreground: 0 0% 100%; /* White */
     --destructive: 0 75% 60%; /* Bright red */
     --destructive-foreground: 0 0% 98%; /* White */

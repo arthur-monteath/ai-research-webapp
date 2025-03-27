@@ -10,4 +10,5 @@ export interface Task {
   title: string;
   description: string;
   questions: Question[];
+  grade?: number;
 }

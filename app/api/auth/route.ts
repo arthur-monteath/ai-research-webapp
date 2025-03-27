@@ -15,6 +15,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ role: 'teacher' });
   }
 
+  if (id === 'grading') {
+    return NextResponse.json({ role: 'grading' });
+  }
+
   // Authenticate with Google Sheets API
   const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   if (!serviceAccountKey) {

@@ -45,6 +45,8 @@ export default function LoginPage() {
           sessionStorage.setItem('studentGroup', data.group);
 
           router.push('/student-dashboard');
+        } else if (data.role === 'grading') {
+          router.push('/grading');
         }
       } else {
         setError(data.error || 'Login failed');
