@@ -27,7 +27,7 @@ export async function GET(
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
   const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  const spreadsheetId = '1O9DE_bvfWl0836QZ3KN85pO_pWqc6ex3cdvckL8_Fao';
 
   try {
     // Fetch all responses from the "Responses" sheet.
