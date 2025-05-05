@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardHeader,
@@ -19,40 +20,39 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// Import ReactMarkdown and plugins
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+
 export default function Grading() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [sortMethod, setSortMethod] = useState<'question' | 'student'>();
+  const [sortMethod, setSortMethod] = useState<'question' | 'student'>('question');
   const [grade, setGrade] = useState<number | null>(null);
+  const [toggleStatus, setToggleStatus] = useState<'X' | 'D'>('X');
+  const [comment, setComment] = useState<string>('');
 
-  // Fetch tasks (and assignments) on mount.
+  // Fetch tasks and assignments on mount.
   useEffect(() => {
     const fetchTasksAndAssignments = async () => {
       try {
-        // Fetch tasks.
         const resTasks = await fetch('/api/tasks');
-        if (!resTasks.ok) {
-          throw new Error('Failed to fetch tasks');
-        }
+        if (!resTasks.ok) throw new Error('Failed to fetch tasks');
         const tasksData: Task[] = await resTasks.json();
         setTasks(tasksData);
 
-        // Optionally, fetch task assignments.
         const resAssignments = await fetch('/api/task-assignments');
-        if (!resAssignments.ok) {
-          throw new Error('Failed to fetch task assignments');
-        }
+        if (!resAssignments.ok) throw new Error('Failed to fetch task assignments');
         const { taskAssignments } = await resAssignments.json();
 
-        // Compute assignment status (if needed).
-        const assignmentStatusMap: {
-          [taskId: string]: 'none' | 'some' | 'all';
-        } = {};
+        // Optionally process assignments here.
+        const assignmentStatusMap: { [taskId: string]: 'none' | 'some' | 'all' } = {};
         const studentIds = Object.keys(taskAssignments);
         const totalStudents = studentIds.length;
-
         tasksData.forEach((task) => {
           let studentsWithTask = 0;
           studentIds.forEach((studentId) => {
@@ -67,7 +67,6 @@ export default function Grading() {
               ? 'all'
               : 'some';
         });
-        // assignmentStatusMap can be used later if needed.
       } catch (error) {
         console.error('Error fetching tasks or assignments:', error);
       }
@@ -76,13 +75,9 @@ export default function Grading() {
     fetchTasksAndAssignments();
   }, []);
 
-  // Update the current response index when using question sorting.
+  // Update response index when using question sort.
   const getResponse = (index: number) => {
-    if (
-      sortMethod === 'question' &&
-      selectedTask &&
-      selectedTask.questions.length > 0
-    ) {
+    if (sortMethod === 'question' && selectedTask && selectedTask.questions.length > 0) {
       const responses = selectedTask.questions[0].responses;
       if (!responses || index < 0 || index >= responses.length) return;
       setCurrentIndex(index);
@@ -92,19 +87,15 @@ export default function Grading() {
     }
   };
 
-  // Change sort method and reset the index.
+  // Change sort method and reset index.
   const changeSortMethod = (method: 'question' | 'student') => {
     setSortMethod(method);
     setCurrentIndex(0);
   };
 
-  // Sync the grade state when the current response changes.
+  // Sync grade when current response changes.
   useEffect(() => {
-    if (
-      sortMethod === 'question' &&
-      selectedTask &&
-      selectedTask.questions.length > 0
-    ) {
+    if (sortMethod === 'question' && selectedTask && selectedTask.questions.length > 0) {
       const responses = selectedTask.questions[0].responses;
       if (responses && responses[currentIndex]) {
         setGrade(responses[currentIndex].grade || null);
@@ -116,18 +107,14 @@ export default function Grading() {
   const handleSelectTask = async (task: Task) => {
     setSelectedTask(task);
     setCurrentIndex(0);
-
+    // Reset toggle and comment on new selection.
+    setToggleStatus('X');
+    setComment('');
     if (task.questions.length > 0) {
       try {
-        const res = await fetch(
-          `/api/${task.id}/${task.questions[0].id}/responses`
-        );
-        if (!res.ok) {
-          throw new Error('Failed to fetch responses');
-        }
+        const res = await fetch(`/api/${task.id}/${task.questions[0].id}/responses`);
+        if (!res.ok) throw new Error('Failed to fetch responses');
         const data = await res.json();
-
-        // Update the task with the fetched responses for the first question.
         const updatedTask: Task = {
           ...task,
           questions: task.questions.map((q, idx) =>
@@ -141,7 +128,7 @@ export default function Grading() {
     }
   };
 
-  // Update the grade for the current response.
+  // Update the grade (with status and comment) via API.
   const updateGrade = async () => {
     if (!selectedTask || selectedTask.questions.length === 0) return;
     const responseToUpdate = selectedTask.questions[0].responses?.[currentIndex];
@@ -155,16 +142,18 @@ export default function Grading() {
           questionId: selectedTask.questions[0].id,
           studentId: responseToUpdate.studentId,
           grade,
+          status: toggleStatus, // "X" or "D"
+          comment,
         }),
       });
       if (res.ok) {
-        // Update the grade in the local state.
+        // Update the grade, status, and comment in the local state.
         setSelectedTask((prev) => {
           if (!prev) return prev;
           const updatedQuestions = prev.questions.map((q, idx) => {
             if (idx === 0) {
               const updatedResponses = (q.responses || []).map((r, j) =>
-                j === currentIndex ? { ...r, grade } : r
+                j === currentIndex ? { ...r, grade, status: toggleStatus, comment } : r
               );
               return { ...q, responses: updatedResponses };
             }
@@ -179,6 +168,22 @@ export default function Grading() {
       console.error('Error updating grade:', error);
     }
   };
+
+  // Parse chat logs: they might be stored as a JSON string.
+  /*const rawChatLogs = selectedTask?.questions[0].responses?.[currentIndex]?.chatLogs;
+  let chatMessages: any[] = [];
+  if (rawChatLogs) {
+    if (typeof rawChatLogs === 'string') {
+      try {
+        chatMessages = JSON.parse(rawChatLogs);
+      } catch (error) {
+        console.error('Error parsing chat logs:', error);
+        chatMessages = [];
+      }
+    } else {
+      chatMessages = rawChatLogs;
+    }
+  }*/
 
   return (
     <Layout>
@@ -257,7 +262,7 @@ export default function Grading() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Task Selection View */}
+            {/* Task Selection */}
             {!selectedTask ? (
               <div className="space-x-4 flex flex-row">
                 {tasks.map((task) => (
@@ -286,16 +291,59 @@ export default function Grading() {
             selectedTask &&
             selectedTask.questions.length > 0 &&
             selectedTask.questions[0].responses ? (
-              <div className="mt-8">
-                <h2 className="text-xl font-semibold mb-4">Grading Response</h2>
-                <div className="mb-4 p-4 border rounded">
-                  <p>
-                    <strong>Response:</strong>{' '}
-                    {selectedTask.questions[0].responses[currentIndex]?.answer ||
-                      'No response'}
-                  </p>
+              <div className="">
+                <div className='max-w-prose mb-4 p-4'>
+                  <strong>Question:</strong> {selectedTask.questions[0].text}
                 </div>
-                <div className="flex justify-between">
+                <div className="mb-4 p-4 border rounded space-y-4">
+                <strong>Response:</strong>
+                  <div>
+                    {selectedTask.questions[0].responses[currentIndex]?.answer || 'No response'}
+                  </div>
+                    {/*<div className="mt-2">
+                      {chatMessages.map((message, index) => (
+                        <div
+                          key={index}
+                          className={`mb-4 ${
+                            message.role === 'user' ? 'text-right' : 'text-left'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block p-2 rounded-lg break-words whitespace-pre-wrap ${
+                              message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
+                            }`}
+                          >
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkMath]}
+                              rehypePlugins={[rehypeKatex]}
+                              components={{
+                                a: ({ node, ...props }) => (
+                                  <a className="text-blue-500 hover:underline" {...props}>
+                                    {props.children}
+                                  </a>
+                                ),
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </span>
+                        </div>
+                      ))}
+                    </div>*/}
+                  </div>
+                <div className="flex items-center space-x-4">
+                  {/* Toggle Button */}
+                  <Button
+                    onClick={() => setToggleStatus(toggleStatus === 'X' ? 'D' : 'X')}
+                    className="w-10 h-10"
+                    style={{
+                      backgroundColor: toggleStatus === 'X' ? '#f87171' : '#4ade80',
+                      color: 'white',
+                    }}
+                  >
+                    {toggleStatus}
+                  </Button>
+                  {/* Grade Buttons */}
                   <div className="flex">
                     {[1, 2, 3, 4, 5].map((value) => (
                       <Button
@@ -318,10 +366,17 @@ export default function Grading() {
                         {value}
                       </Button>
                     ))}
-                    <Button onClick={updateGrade} className="w-10 ml-2 rounded-full">
-                      <RotateCw />
-                    </Button>
                   </div>
+                  {/* Comment Box */}
+                  <Textarea
+                    placeholder="Add comment"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="w-64"
+                  />
+                  <Button onClick={updateGrade} className="w-10 rounded-full">
+                    <RotateCw />
+                  </Button>
                 </div>
               </div>
             ) : sortMethod === 'question' ? (
