@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     // Fetch tasks from the sheet
     const tasksRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Tasks!A:D',
+      range: 'Responses!A:K',
     });
     const tasksRows = tasksRes.data.values || [];
 

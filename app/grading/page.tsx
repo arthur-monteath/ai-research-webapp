@@ -12,7 +12,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Task, Question } from '@/types';
-import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, RotateCw, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +33,7 @@ export default function Grading() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [sortMethod, setSortMethod] = useState<'question' | 'student'>('question');
   const [grade, setGrade] = useState<number | null>(null);
-  const [toggleStatus, setToggleStatus] = useState<'X' | 'D'>('X');
+  const [toggleStatus, setToggleStatus] = useState<'X' | 'O'>('X');
   const [comment, setComment] = useState<string>('');
 
   // Fetch tasks and assignments on mount.
@@ -134,15 +134,16 @@ export default function Grading() {
     const responseToUpdate = selectedTask.questions[0].responses?.[currentIndex];
     if (!responseToUpdate || grade === null) return;
     try {
+      setIsUpdating(true);
       const res = await fetch('/api/grade', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           taskId: selectedTask.id,
           questionId: selectedTask.questions[0].id,
           studentId: responseToUpdate.studentId,
           grade,
-          status: toggleStatus, // "X" or "D"
+          status: toggleStatus, // "X" or "O"
           comment,
         }),
       });
@@ -166,6 +167,8 @@ export default function Grading() {
       }
     } catch (error) {
       console.error('Error updating grade:', error);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -209,11 +212,12 @@ export default function Grading() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            { selectedTask ? (
             <div className="flex items-center space-x-2">
               <Button variant="ghost" onClick={() => getResponse(currentIndex - 1)}>
                 <ChevronLeft />
               </Button>
-              <div className="flex items-center space-x-2">
+              <div  className="flex items-center space-x-2">
                 <span
                   contentEditable
                   suppressContentEditableWarning
@@ -260,6 +264,9 @@ export default function Grading() {
                 <ChevronRight />
               </Button>
             </div>
+            ): (
+              <span className="text-center">Select a task</span>
+            )}
           </CardHeader>
           <CardContent>
             {/* Task Selection */}
@@ -291,7 +298,7 @@ export default function Grading() {
             selectedTask &&
             selectedTask.questions.length > 0 &&
             selectedTask.questions[0].responses ? (
-              <div className="">
+              <div className="grid grid-cols-1 md:grid-cols-2">
                 <div className='max-w-prose mb-4 p-4'>
                   <strong>Question:</strong> {selectedTask.questions[0].text}
                 </div>
@@ -334,14 +341,14 @@ export default function Grading() {
                 <div className="flex items-center space-x-4">
                   {/* Toggle Button */}
                   <Button
-                    onClick={() => setToggleStatus(toggleStatus === 'X' ? 'D' : 'X')}
+                    onClick={() => setToggleStatus(toggleStatus === 'X' ? 'O' : 'X')}
                     className="w-10 h-10"
                     style={{
                       backgroundColor: toggleStatus === 'X' ? '#f87171' : '#4ade80',
                       color: 'white',
                     }}
                   >
-                    {toggleStatus}
+                    {toggleStatus === 'X' ? (<X/>) : (<Check/>)}
                   </Button>
                   {/* Grade Buttons */}
                   <div className="flex">
@@ -349,7 +356,7 @@ export default function Grading() {
                       <Button
                         key={value}
                         variant={
-                          selectedTask.questions[0].responses?.[currentIndex]?.grade === value
+                          grade === value
                             ? 'default'
                             : 'outline'
                         }
@@ -374,8 +381,9 @@ export default function Grading() {
                     onChange={(e) => setComment(e.target.value)}
                     className="w-64"
                   />
+                  {/* Submit Button */}
                   <Button onClick={updateGrade} className="w-10 rounded-full">
-                    <RotateCw />
+                    { !isUpdating && <RotateCw /> }
                   </Button>
                 </div>
               </div>
