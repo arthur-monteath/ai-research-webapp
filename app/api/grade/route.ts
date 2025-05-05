@@ -7,14 +7,13 @@ export async function POST(request: Request) {
     studentId,
     taskId,
     questionId,
-    gradingStatus,
-    comments,
-    correct,
     grade,
+    status,    // X or O
+    comment,   // your text
   } = await request.json();
 
   const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  const spreadsheetId    = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  const spreadsheetId     = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   if (!serviceAccountKey || !spreadsheetId) {
     return NextResponse.json(
       { error: 'Missing GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_SHEETS_SPREADSHEET_ID' },
@@ -22,12 +21,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // decode service account
   const decodedKey = JSON.parse(
     Buffer.from(serviceAccountKey, 'base64').toString('utf8')
   );
-
-  // full spreadsheet scope for updating
   const auth = new google.auth.GoogleAuth({
     credentials: decodedKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
@@ -35,30 +31,25 @@ export async function POST(request: Request) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   try {
-    // 1) fetch all responses
+    // fetch all rows
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: 'Responses!A:K',
     });
     const rows = resp.data.values || [];
 
-    // 2) find the data row (skip header row at index 0)
-    const idx = rows.findIndex((r) =>
+    // locate the row
+    const idx = rows.findIndex(r =>
       r[1] === studentId &&
       r[2] === String(taskId) &&
       r[3] === String(questionId)
     );
     if (idx <= 0) {
-      return NextResponse.json(
-        { error: 'Row not found for given student/task/question' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Row not found' }, { status: 404 });
     }
-
-    // sheet rows are 1-based, so rowNumber = idx + 1
     const rowNumber = idx + 1;
 
-    // 3) update columns H, I, J, K on that row
+    // write H:K → [Grading Status, Comments, Correct, Grade]
     const updateRange = `Responses!H${rowNumber}:K${rowNumber}`;
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -66,21 +57,19 @@ export async function POST(request: Request) {
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [[
-          gradingStatus,
-          comments ?? '',
-          // cast boolean or string
-          correct != null ? String(correct) : '',
-          grade != null   ? String(grade)   : ''
+          'graded',            // H: Grading Status
+          comment  || '',      // I: Comments
+          status   || '',      // J: Correct (X/O)
+          String(grade)        // K: Grade
         ]]
       },
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('Error updating grading:', error);
-    const msg = error instanceof Error ? error.message : String(error);
+  } catch (e: any) {
+    console.error(e);
     return NextResponse.json(
-      { error: 'Error updating grading', details: msg },
+      { error: 'Error updating grading', details: e.message },
       { status: 500 }
     );
   }
