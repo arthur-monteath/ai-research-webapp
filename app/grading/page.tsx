@@ -11,389 +11,191 @@ import {
   CardContent,
   CardFooter,
 } from '@/components/ui/card';
-import { Task, Question } from '@/types';
-import { Check, ChevronLeft, ChevronRight, RotateCw, X } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ChevronLeft, ChevronRight, RotateCw, Check, X } from 'lucide-react';
 
-// Import ReactMarkdown and plugins
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+type Task = {
+  id: string;
+  title: string;
+  description: string;
+  questions: { id: string; text: string }[];
+};
+
+type Response = {
+  studentId: string;
+  answer: string;
+  gradingStatus: string;
+  comment: string;
+  status: 'X' | 'O';
+  grade: number | null;
+};
 
 export default function Grading() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks]               = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [sortMethod, setSortMethod] = useState<'question' | 'student'>('question');
-  const [grade, setGrade] = useState<number | null>(null);
-  const [toggleStatus, setToggleStatus] = useState<'X' | 'O'>('X');
-  const [comment, setComment] = useState<string>('');
+  const [responses, setResponses]       = useState<Response[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [grade, setGrade]               = useState<number | null>(null);
+  const [status, setStatus]             = useState<'X'|'O'>('X');
+  const [comment, setComment]           = useState('');
+  const [isUpdating, setIsUpdating]     = useState(false);
 
-  // Fetch tasks and assignments on mount.
+  // 1) fetch tasks on mount
   useEffect(() => {
-    const fetchTasksAndAssignments = async () => {
-      try {
-        const resTasks = await fetch('/api/tasks');
-        if (!resTasks.ok) throw new Error('Failed to fetch tasks');
-        const tasksData: Task[] = await resTasks.json();
-        setTasks(tasksData);
-
-        const resAssignments = await fetch('/api/task-assignments');
-        if (!resAssignments.ok) throw new Error('Failed to fetch task assignments');
-        const { taskAssignments } = await resAssignments.json();
-
-        // Optionally process assignments here.
-        const assignmentStatusMap: { [taskId: string]: 'none' | 'some' | 'all' } = {};
-        const studentIds = Object.keys(taskAssignments);
-        const totalStudents = studentIds.length;
-        tasksData.forEach((task) => {
-          let studentsWithTask = 0;
-          studentIds.forEach((studentId) => {
-            if (taskAssignments[studentId].includes(task.id)) {
-              studentsWithTask += 1;
-            }
-          });
-          assignmentStatusMap[task.id] =
-            studentsWithTask === 0
-              ? 'none'
-              : studentsWithTask === totalStudents
-              ? 'all'
-              : 'some';
-        });
-      } catch (error) {
-        console.error('Error fetching tasks or assignments:', error);
-      }
-    };
-
-    fetchTasksAndAssignments();
+    fetch('/api/tasks')
+      .then((r) => r.json())
+      .then(setTasks)
+      .catch(console.error);
   }, []);
 
-  // Update response index when using question sort.
-  const getResponse = (index: number) => {
-    if (sortMethod === 'question' && selectedTask && selectedTask.questions.length > 0) {
-      const responses = selectedTask.questions[0].responses;
-      if (!responses || index < 0 || index >= responses.length) return;
-      setCurrentIndex(index);
-    } else {
-      if (index < 0 || index >= tasks.length) return;
-      setCurrentIndex(index);
-    }
-  };
-
-  // Change sort method and reset index.
-  const changeSortMethod = (method: 'question' | 'student') => {
-    setSortMethod(method);
-    setCurrentIndex(0);
-  };
-
-  // Sync grade when current response changes.
-  useEffect(() => {
-    if (sortMethod === 'question' && selectedTask && selectedTask.questions.length > 0) {
-      const responses = selectedTask.questions[0].responses;
-      if (responses && responses[currentIndex]) {
-        setGrade(responses[currentIndex].grade || null);
-      }
-    }
-  }, [currentIndex, selectedTask, sortMethod]);
-
-  // Handle task selection and fetch responses for the task’s first question.
-  const handleSelectTask = async (task: Task) => {
+  // 2) when a task is selected, fetch its first question's responses
+  const selectTask = async (task: Task) => {
     setSelectedTask(task);
     setCurrentIndex(0);
-    // Reset toggle and comment on new selection.
-    setToggleStatus('X');
+    setResponses([]);
+    setGrade(null);
+    setStatus('X');
     setComment('');
-    if (task.questions.length > 0) {
-      try {
-        const res = await fetch(`/api/${task.id}/${task.questions[0].id}/responses`);
-        if (!res.ok) throw new Error('Failed to fetch responses');
-        const data = await res.json();
-        const updatedTask: Task = {
-          ...task,
-          questions: task.questions.map((q, idx) =>
-            idx === 0 ? { ...q, responses: data.responses } : q
-          ),
-        };
-        setSelectedTask(updatedTask);
-      } catch (error) {
-        console.error('Error fetching responses:', error);
-      }
+
+    if (!task.questions.length) return;
+    const q = task.questions[0];
+    try {
+      const res = await fetch(`/api/${task.id}/${q.id}/responses`);
+      if (!res.ok) throw new Error(res.statusText);
+      const { responses } = await res.json();
+      setResponses(responses);
+    } catch (e) {
+      console.error('Failed to load responses:', e);
     }
   };
 
-  // Update the grade (with status and comment) via API.
-  const updateGrade = async () => {
-    if (!selectedTask || selectedTask.questions.length === 0) return;
-    const responseToUpdate = selectedTask.questions[0].responses?.[currentIndex];
-    if (!responseToUpdate || grade === null) return;
+  // 3) hydrate form fields when currentIndex or responses change
+  useEffect(() => {
+    const r = responses[currentIndex];
+    if (r) {
+      setGrade(r.grade);
+      setStatus(r.status);
+      setComment(r.comment);
+    }
+  }, [currentIndex, responses]);
+
+  // 4) navigation helpers
+  const prev = () => setCurrentIndex((i) => Math.max(0, i - 1));
+  const next = () => setCurrentIndex((i) => Math.min(responses.length - 1, i + 1));
+
+  // 5) submit grading
+  const submit = async () => {
+    if (!selectedTask) return;
+    const resp = responses[currentIndex];
+    if (!resp || grade == null) return;
+    setIsUpdating(true);
     try {
-      setIsUpdating(true);
       const res = await fetch('/api/grade', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
-          taskId: selectedTask.id,
-          questionId: selectedTask.questions[0].id,
-          studentId: responseToUpdate.studentId,
+          taskId:      selectedTask.id,
+          questionId:  selectedTask.questions[0].id,
+          studentId:   resp.studentId,
           grade,
-          status: toggleStatus, // "X" or "O"
+          status,
           comment,
         }),
       });
-      if (res.ok) {
-        // Update the grade, status, and comment in the local state.
-        setSelectedTask((prev) => {
-          if (!prev) return prev;
-          const updatedQuestions = prev.questions.map((q, idx) => {
-            if (idx === 0) {
-              const updatedResponses = (q.responses || []).map((r, j) =>
-                j === currentIndex ? { ...r, grade, status: toggleStatus, comment } : r
-              );
-              return { ...q, responses: updatedResponses };
-            }
-            return q;
-          });
-          return { ...prev, questions: updatedQuestions };
-        });
-      } else {
-        console.error('Failed to update grade');
-      }
-    } catch (error) {
-      console.error('Error updating grade:', error);
+      if (!res.ok) throw new Error(res.statusText);
+      // locally update
+      setResponses((rs) =>
+        rs.map((r,i) => i === currentIndex ? { ...r, grade, status, comment } : r)
+      );
+    } catch (e) {
+      console.error('Error submitting grade:', e);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Parse chat logs: they might be stored as a JSON string.
-  /*const rawChatLogs = selectedTask?.questions[0].responses?.[currentIndex]?.chatLogs;
-  let chatMessages: any[] = [];
-  if (rawChatLogs) {
-    if (typeof rawChatLogs === 'string') {
-      try {
-        chatMessages = JSON.parse(rawChatLogs);
-      } catch (error) {
-        console.error('Error parsing chat logs:', error);
-        chatMessages = [];
-      }
-    } else {
-      chatMessages = rawChatLogs;
-    }
-  }*/
-
   return (
     <Layout>
       <div className="space-y-6">
-        <Card>
-          <CardHeader className="rounded-t-lg flex flex-row justify-between items-center">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-3xl font-black">
-                  {sortMethod === 'question'
-                    ? 'Question'
-                    : sortMethod === 'student'
-                    ? 'Student'
-                    : 'Sort by...'}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => changeSortMethod('question')}>
-                  Question
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => changeSortMethod('student')}>
-                  Student
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            { selectedTask ? (
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" onClick={() => getResponse(currentIndex - 1)}>
-                <ChevronLeft />
-              </Button>
-              <div  className="flex items-center space-x-2">
-                <span
-                  contentEditable
-                  suppressContentEditableWarning
-                  className="text-center outline-none"
-                  onBlur={(e) => {
-                    const index = parseInt(e.target.textContent || '', 10);
-                    if (!isNaN(index)) {
-                      if (
-                        sortMethod === 'question' &&
-                        selectedTask &&
-                        selectedTask.questions.length > 0
-                      ) {
-                        const responsesCount =
-                          selectedTask.questions[0].responses?.length || 0;
-                        if (index > 0 && index <= responsesCount) {
-                          getResponse(index - 1);
-                          e.target.textContent = index.toString();
-                        } else {
-                          e.target.textContent = (currentIndex + 1).toString();
-                        }
-                      } else if (index > 0 && index <= tasks.length) {
-                        getResponse(index - 1);
-                        e.target.textContent = index.toString();
-                      } else {
-                        e.target.textContent = (currentIndex + 1).toString();
-                      }
-                    } else {
-                      e.target.textContent = (currentIndex + 1).toString();
-                    }
-                  }}
-                >
-                  {currentIndex + 1}
-                </span>
-                <span>
-                  /{' '}
-                  {sortMethod === 'question' &&
-                  selectedTask &&
-                  selectedTask.questions.length > 0
-                    ? selectedTask.questions[0].responses?.length
-                    : tasks.length}
-                </span>
-              </div>
-              <Button variant="ghost" onClick={() => getResponse(currentIndex + 1)}>
-                <ChevronRight />
-              </Button>
-            </div>
-            ): (
-              <span className="text-center">Select a task</span>
-            )}
-          </CardHeader>
-          <CardContent>
-            {/* Task Selection */}
-            {!selectedTask ? (
-              <div className="space-x-4 flex flex-row">
-                {tasks.map((task) => (
-                  <Card
-                    key={task.id}
-                    onClick={() => handleSelectTask(task)}
-                    className="cursor-pointer"
-                  >
-                    <CardHeader>
-                      <CardTitle>{task.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="mb-2">{task.description}</p>
-                      <p className="font-bold">
-                        Number of questions: {task.questions.length}
-                      </p>
-                    </CardContent>
-                    <CardFooter>{/* Additional footer content if needed */}</CardFooter>
-                  </Card>
-                ))}
-              </div>
-            ) : null}
+        {/* Task chooser */}
+        {!selectedTask && (
+          <div className="flex flex-wrap gap-4">
+            {tasks.map((t) => (
+              <Card key={t.id} className="cursor-pointer" onClick={() => selectTask(t)}>
+                <CardHeader><CardTitle>{t.title}</CardTitle></CardHeader>
+                <CardFooter>Questions: {t.questions.length}</CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
 
-            {/* Grading Interface for Question Sorting */}
-            {sortMethod === 'question' &&
-            selectedTask &&
-            selectedTask.questions.length > 0 &&
-            selectedTask.questions[0].responses ? (
-              <div className="grid grid-cols-1 md:grid-cols-2">
-                <div className='max-w-prose mb-4 p-4'>
-                  <strong>Question:</strong> {selectedTask.questions[0].text}
-                </div>
-                <div className="mb-4 p-4 border rounded space-y-4">
-                <strong>Response:</strong>
-                  <div>
-                    {selectedTask.questions[0].responses[currentIndex]?.answer || 'No response'}
-                  </div>
-                    {/*<div className="mt-2">
-                      {chatMessages.map((message, index) => (
-                        <div
-                          key={index}
-                          className={`mb-4 ${
-                            message.role === 'user' ? 'text-right' : 'text-left'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block p-2 rounded-lg break-words whitespace-pre-wrap ${
-                              message.role === 'user' ? 'bg-blue-100' : 'bg-gray-100'
-                            }`}
-                          >
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkMath]}
-                              rehypePlugins={[rehypeKatex]}
-                              components={{
-                                a: ({ node, ...props }) => (
-                                  <a className="text-blue-500 hover:underline" {...props}>
-                                    {props.children}
-                                  </a>
-                                ),
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
-                          </span>
-                        </div>
-                      ))}
-                    </div>*/}
-                  </div>
-                <div className="flex items-center space-x-4">
-                  {/* Toggle Button */}
-                  <Button
-                    onClick={() => setToggleStatus(toggleStatus === 'X' ? 'O' : 'X')}
-                    className="w-10 h-10"
-                    style={{
-                      backgroundColor: toggleStatus === 'X' ? '#f87171' : '#4ade80',
-                      color: 'white',
-                    }}
-                  >
-                    {toggleStatus === 'X' ? (<X/>) : (<Check/>)}
-                  </Button>
-                  {/* Grade Buttons */}
-                  <div className="flex">
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <Button
-                        key={value}
-                        variant={
-                          grade === value
-                            ? 'default'
-                            : 'outline'
-                        }
-                        onClick={() => setGrade(value)}
-                        className={
-                          'font-bold text-lg ' +
-                          (value === 1
-                            ? 'rounded-none rounded-l-lg'
-                            : value === 5
-                            ? 'rounded-none rounded-r-lg'
-                            : 'rounded-none')
-                        }
-                      >
-                        {value}
-                      </Button>
-                    ))}
-                  </div>
-                  {/* Comment Box */}
-                  <Textarea
-                    placeholder="Add comment"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    className="w-64"
-                  />
-                  {/* Submit Button */}
-                  <Button onClick={updateGrade} className="w-10 rounded-full">
-                    { !isUpdating && <RotateCw /> }
-                  </Button>
+        {/* Grading panel */}
+        {selectedTask && responses.length > 0 && (
+          <Card>
+            <CardHeader className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">
+                Q: {selectedTask.questions[0].text}
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 p-4 border rounded">
+                {responses[currentIndex].answer || 'No response'}
+              </div>
+              <div className="flex items-center space-x-2 mb-4">
+                <Button onClick={prev} disabled={currentIndex === 0}>
+                  <ChevronLeft />
+                </Button>
+                <span>{currentIndex + 1} / {responses.length}</span>
+                <Button onClick={next} disabled={currentIndex === responses.length - 1}>
+                  <ChevronRight />
+                </Button>
+              </div>
+              <div className="flex items-center space-x-2 mb-4">
+                {/* status toggle */}
+                <Button
+                disabled={true}
+                  onClick={() => setStatus(status === 'X' ? 'O' : 'X')}
+                  className="w-10 h-10"
+                  style={{ backgroundColor: status==='X' ? '#f87171' : '#4ade80', color:'white' }}
+                >
+                  {status==='X' ? <X/> : <Check/>}
+                </Button>
+
+                {/* grade buttons */}
+                <div className="flex">
+                  {[0,1,2].map((v) => (
+                    <Button
+                      key={v}
+                      variant={grade===v ? 'default':'outline'}
+                      onClick={() => setGrade(v)}
+                      className={
+                        'font-bold ' +
+                        (v===0?'rounded-l-lg ':v===2?'rounded-r-lg ':'')
+                      }
+                    >
+                      {v}
+                    </Button>
+                  ))}
                 </div>
               </div>
-            ) : sortMethod === 'question' ? (
-              <p className="mt-4">
-                Please select a task with at least one question and responses to grade.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+
+              <Textarea
+                placeholder="Comment"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                className="w-full mb-4"
+              />
+
+              <Button onClick={submit} disabled={isUpdating}>
+                {isUpdating ? <RotateCw className="animate-spin"/> : 'Submit'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* no responses */}
+        {selectedTask && responses.length === 0 && (
+          <p>Select a task with at least one question & responses.</p>
+        )}
       </div>
     </Layout>
   );
