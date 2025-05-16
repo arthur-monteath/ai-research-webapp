@@ -168,6 +168,7 @@ export default function Grading() {
 
         {/* Grading panel */}
         {selectedTask && responses.length > 0 && (
+          <>
           <Card className='max-w-screen-lg mx-auto min-h-96 flex flex-col justify-between'>
             <CardHeader className=''>
               <div className='flex items-center space-x-2 text-2xl font-bold mb-6'>
@@ -184,7 +185,7 @@ export default function Grading() {
                   <ChevronRight />
                 </Button>
               </div>
-              <div className='flex lg:flex-row justify-between gap-8'>
+              <div className='flex flex-col md:flex-row justify-between gap-8'>
                 <div className="max-w-prose flex-1">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {selectedTask.questions[questionIdx].text}
@@ -247,6 +248,22 @@ export default function Grading() {
               </div>
             </CardContent>
           </Card>
+          <Card className='max-w-screen-lg mx-auto flex flex-col justify-between'>
+            <CardContent className='mt-6 gap-2 flex flex-wrap justify-center'>
+              {responses.map((resp, i) => (
+                <div
+                  key={i}
+                  className={`border w-12 h-12 hover:border-2 hover:border-accent transition-all rounded flex items-center justify-center cursor-pointer
+                  ${i === respIdx ? 'border-accent border-4' : ''}
+                  ${resp.grades[gradingId] ? 'bg-accent' : ''}`}
+                  onClick={() => setRespIdx(i)}
+                >
+                  <span className='text-2xl font-bold'>{i + 1}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          </>
         )}
 
         {/* No responses */}
