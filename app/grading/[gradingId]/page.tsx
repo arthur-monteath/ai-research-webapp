@@ -12,6 +12,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { ChevronLeft, ChevronRight, RotateCw, Check, X } from 'lucide-react';
+import { useParams } from 'next/navigation';
 
 type Task = {
   id: string;
@@ -38,6 +39,7 @@ export default function Grading() {
   const [status, setStatus]             = useState<'X'|'O'>('X');
   const [comment, setComment]           = useState('');
   const [isUpdating, setIsUpdating]     = useState(false);
+  const gradingId = useParams().gradingId;
 
   // 1) fetch tasks on mount
   useEffect(() => {

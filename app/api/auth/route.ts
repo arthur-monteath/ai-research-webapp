@@ -11,13 +11,9 @@ export async function POST(request: Request) {
   }
 
   // Check if the ID is the teacher's ID
-  if (id === 'teacher123') {
+  /*if (id === 'teacher123') {
     return NextResponse.json({ role: 'teacher' });
-  }
-
-  if (id === 'grading') {
-    return NextResponse.json({ role: 'grading' });
-  }
+  }*/
 
   // Authenticate with Google Sheets API
   const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -40,6 +36,31 @@ export async function POST(request: Request) {
   const sheets = google.sheets({ version: 'v4', auth });
 
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+
+  try {
+    const res = await sheets.spreadsheets.values.get({spreadsheetId, range: 'GraderLogin!A:B'});
+    const rows = res.data.values;
+    if (!rows || rows.length === 0) {
+      return NextResponse.json({ error: 'No data found in the GraderLogin sheet' }, { status: 500 });
+    }
+    for (const row of rows.slice(1)) {
+      const login = row[0];
+      const gradingId = row[1];
+      if (login === id) {
+      // Return the grader's role and name
+      return NextResponse.json({ role: 'grader', gradingId: gradingId });
+      }
+    }
+  } catch (error) {
+    console.error('Error accessing Google Sheets:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+
+  if (id === 'grading') {
+    
+
+    return NextResponse.json({ role: 'grading', user: '' });
+  }
 
   try {
     // Fetch data from the "Data" sheet
