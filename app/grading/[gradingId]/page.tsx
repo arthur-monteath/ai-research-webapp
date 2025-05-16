@@ -145,6 +145,7 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
                 key={s}
                 variant={i===stuIdx?'default':'outline'}
                 onClick={()=>{
+                  setResp(null);
                   setStuIdx(i);
                   setQuestionIdx(0);
                   fetchAllForStudent(task!, students[i]);            
