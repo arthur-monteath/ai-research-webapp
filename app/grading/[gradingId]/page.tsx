@@ -1,164 +1,136 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Layout from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import Layout        from '@/components/layout';
+import { Button }    from '@/components/ui/button';
 import {
   Card, CardHeader, CardTitle, CardContent, CardFooter,
 } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RotateCw } from 'lucide-react';
+import {
+  ChevronLeft, ChevronRight,
+  ChevronsUp,  ChevronsDown,
+  RotateCw,
+} from 'lucide-react';
 import { useParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm     from 'remark-gfm';
 
-/* ---------- data types ---------- */
+/* ---------- types ---------- */
 type Task = {
   id: string;
   title: string;
-  description: string;
   questions: { id: string; text: string }[];
 };
 
 type Response = {
   studentId: string;
   answer: string;
-  grades: Record<string, string>; // Grade1…Grade6
+  grades: Record<string, string>;
 };
 
 /* ---------- component ---------- */
-export default function Grading() {
-  const { gradingId } = useParams() as { gradingId: string }; // "Grade3" etc.
+export default function GradeByStudent() {
+  const { gradingId } = useParams() as { gradingId: string }; // "Grade3"
 
-  const [tasks, setTasks]               = useState<Task[]>([]);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  /* task & student selection */
+  const [tasks, setTasks]         = useState<Task[]>([]);
+  const [task,  setTask]          = useState<Task | null>(null);
+  const [students, setStudents]   = useState<string[]>([]);
+  const [stuIdx,   setStuIdx]     = useState(0); // which student
 
-  const [savedGrade, setSavedGrade]     = useState<number | null>(null); // sheet value
-  const [grade, setGrade]               = useState<number | null>(null); // selected value
+  /* per-question response for current student */
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [resp, setResp] = useState<Response | null>(null);
+  const [studentResponses, setStudentResponses] = useState<(Response|null)[]>([]);
+  
+  /* grading UI */
+  const [savedGrade, setSaved] = useState<number | null>(null);
+  const [grade,      setGrade] = useState<number | null>(null);
+  const [saving,     setSaving]= useState(false);
 
-  const [isSaving, setIsSaving]         = useState(false);
-
-  const [questionIdx, setQuestionIdx]   = useState(0);
-  const [responses, setResponses]       = useState<Response[]>([]);
-  const [respIdx,     setRespIdx]       = useState(0);
-
-  /* ---- fetch task list ---- */
+  /* fetch tasks once */
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(r => r.json())
-      .then(setTasks)
-      .catch(console.error);
+    fetch('/api/tasks').then(r=>r.json()).then(setTasks).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (selectedTask) loadResponses(selectedTask, questionIdx);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [questionIdx, selectedTask]);
-
-  /* ---- select task and load responses ---- */
-  const loadResponses = async (task: Task, qIdx: number) => {
-    setSelectedTask(task);
-    setResponses([]);
-    setRespIdx(0);
+  /* when a task is chosen, pull list of studentIds from Q1 */
+  const chooseTask = async (t: Task) => {
+    setTask(t);
+    setQuestionIdx(0);
+    setStuIdx(0);
+    setResp(null);
+    setSaved(null);
     setGrade(null);
-    setSavedGrade(null);
 
-    if (!task.questions.length) return;
-    const q = task.questions[qIdx];
+    if (!t.questions.length) return;
+    const firstQ = t.questions[0];
+    const r = await fetch(`/api/${t.id}/${firstQ.id}/responses`).then(r=>r.json());
+    const ids = r.responses.map((x: Response) => x.studentId);
+    setStudents(ids);
 
-    try {
-      const r = await fetch(`/api/${task.id}/${q.id}/responses`);
-      if (!r.ok) throw new Error(r.statusText);
-      const { responses } = await r.json();
-      setResponses(responses);
-    } catch (e) {
-      console.error('Failed to load responses:', e);
-    }
+    if (ids.length) fetchAllForStudent(t, ids[0]);
   };
 
-  /* ---- hydrate when index / responses change ---- */
   useEffect(() => {
-    const resp = responses[respIdx];
-    if (!resp) return;
+    const r = studentResponses[questionIdx] || null;
+    setResp(r);
+  
+    const g = r?.grades[gradingId] ?? '';
+    const n = g === '' ? null : parseInt(g, 10);
+    const norm = Number.isNaN(n) ? null : n;
+    setSaved(norm);
+    setGrade(norm);
+  }, [questionIdx, studentResponses, gradingId]);
 
-    const raw = resp.grades[gradingId] ?? '';
-    const g   = raw === '' ? null : parseInt(raw, 10);
-    const normalized = Number.isNaN(g) ? null : g;
+  /* fetch every question’s response for a single student (array aligned to questions) */
+const fetchAllForStudent = async (t: Task, stuId: string) => {
+    const list: (Response|null)[] = await Promise.all(
+      t.questions.map(async (q) => {
+        const { responses } = await fetch(`/api/${t.id}/${q.id}/responses`).then(r=>r.json());
+        return responses.find((x:Response)=>x.studentId===stuId) || null;
+      })
+    );
+    setStudentResponses(list);
+    setResp(list[0]);
+      // initialise grading state
+    const g = list[0]?.grades[gradingId] ?? '';
+    const n = g === '' ? null : parseInt(g, 10);
+    const norm = Number.isNaN(n) ? null : n;
+    setSaved(norm);
+    setGrade(norm);
+  };
 
-    setSavedGrade(normalized);
-    setGrade(normalized);          // start with current sheet value
-  }, [respIdx, responses, gradingId]);
-
-  /* ---- nav helpers ---- */
-  const prevTen = () => setRespIdx(i => Math.max(0, i - 10));
-  const nextTen = () => setRespIdx(i => Math.min(responses.length - 1, i + 10));
-
-  const prev = () => setRespIdx(i => Math.max(0, i - 1));
-  const next = () => setRespIdx(i => Math.min(responses.length - 1, i + 1));
-
-  const prevQ = () => setQuestionIdx(i => Math.max(0, i - 1));
-  const nextQ = () =>
-    setQuestionIdx(i =>
-      Math.min((selectedTask?.questions.length ?? 1) - 1, i + 1)
-  );
-
-  /* ---- save ---- */
+  /* save */
   const save = async () => {
-    if (!selectedTask) return;
-    const resp = responses[respIdx];
-    if (!resp || grade == null || grade === savedGrade) return;
-
-    setIsSaving(true);
+    if (!task || !resp || grade==null || grade===savedGrade) return;
+    setSaving(true);
     try {
-      const r = await fetch('/api/grade', {
-        method : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body   : JSON.stringify({
-          taskId    : selectedTask.id,
-          questionId: selectedTask.questions[questionIdx].id,
-          studentId : resp.studentId,
+      await fetch('/api/grade',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          taskId:task.id,
+          questionId:task.questions[questionIdx].id,
+          studentId:resp.studentId,
           gradingId,
-          value     : grade,
-        }),
+          value:grade,
+        })
       });
-      if (!r.ok) throw new Error(r.statusText);
-
-      // optimistic update
-      setResponses(rs =>
-        rs.map((x, i) =>
-          i === respIdx
-            ? { ...x, grades: { ...x.grades, [gradingId]: String(grade) } }
-            : x
-        )
-      );
-      setSavedGrade(grade);
-    } catch (e) {
-      console.error('Error saving grade:', e);
-    } finally {
-      setIsSaving(false);
-    }
+      setSaved(grade);
+    }catch(e){console.error(e);}finally{setSaving(false);}
   };
 
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp')   prevQ();
-      if (e.key === 'ArrowDown') nextQ();
-      if (e.key === 'ArrowLeft') prev();
-      if (e.key === 'ArrowRight') next();
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [prev, next, prevQ, nextQ]);
+  /* UI */
 
-  /* ---- UI ---- */
   return (
     <Layout>
       <div className="space-y-6">
 
-        {/* Task chooser */}
-        {!selectedTask && (
+        {/* choose task */}
+        {!task && (
           <div className="flex flex-wrap gap-4 justify-center">
-            {tasks.map(t => (
-              <Card key={t.id} className="cursor-pointer" onClick={() => loadResponses(t, questionIdx)}>
+            {tasks.map(t=>(
+              <Card key={t.id} className="cursor-pointer" onClick={()=>chooseTask(t)}>
                 <CardHeader><CardTitle>{t.title}</CardTitle></CardHeader>
                 <CardFooter>Questions: {t.questions.length}</CardFooter>
               </Card>
@@ -166,39 +138,60 @@ export default function Grading() {
           </div>
         )}
 
-        {/* Grading panel */}
-        {selectedTask && responses.length > 0 && (
-          <>
-          <Card className='max-w-screen-lg mx-auto min-h-96 flex flex-col justify-between'>
-            <CardHeader className=''>
-              <div className='flex items-center space-x-2 text-2xl font-bold mb-6'>
-                <Button onClick={prevQ} disabled={questionIdx === 0}>
-                  <ChevronLeft />
-                </Button>
-                <span className="text-2xl px-2 font-bold text-center">
-                  Question {questionIdx + 1}/{selectedTask.questions.length}
+        {/* choose student */}
+        <div className="max-w-screen-lg mx-auto mb-12 flex flex-wrap gap-4 justify-center mt-8">
+            {students.map((s,i)=>(
+              <Button
+                key={s}
+                variant={i===stuIdx?'default':'outline'}
+                onClick={()=>{
+                  setStuIdx(i);
+                  setQuestionIdx(0);
+                  fetchAllForStudent(task!, students[i]);            
+                }}
+              >
+                {s}
+              </Button>
+            ))}
+        </div>
+
+        {/* grading panel */}
+        {task && resp && (
+          <Card className="max-w-screen-lg mx-auto flex flex-col">
+            <CardHeader className='gap-4'>
+              <h2 className="text-xl font-semibold">
+                Student: {resp.studentId}
+              </h2>
+              {/* question nav */}
+              <div className="flex items-center gap-4">
+                <Button onClick={()=>setQuestionIdx(i=>Math.max(0,i-1))}
+                        disabled={questionIdx===0}><ChevronLeft/></Button>
+
+                <span>
+                  Q {questionIdx+1}/{task.questions.length}
                 </span>
-                <Button
-                  onClick={nextQ}
-                  disabled={questionIdx === selectedTask.questions.length - 1}
-                >
-                  <ChevronRight />
-                </Button>
+
+                <Button onClick={()=>
+                  setQuestionIdx(i=>Math.min(task.questions.length-1,i+1))}
+                  disabled={questionIdx===task.questions.length-1}
+                ><ChevronRight/></Button>
               </div>
+
               <div className='flex flex-col md:flex-row justify-between gap-8'>
-                <div className="max-w-prose flex-1">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {selectedTask.questions[questionIdx].text}
-                  </ReactMarkdown>
+                <div className='flex-1'>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {task.questions[questionIdx].text}
+                </ReactMarkdown>
                 </div>
 
-                <div className="max-w-prose mb-4 p-4 border rounded flex-1">
-                    {responses[respIdx].answer || 'No response'}
+                <div className="flex-1 border p-4 rounded">
+                  {resp.answer || 'No response'}
                 </div>
               </div>
+              
             </CardHeader>
 
-            <CardContent className='flex flex-col md:flex-row gap-6 md:gap-0 justify-between mt-6'>
+            <CardContent className="flex flex-col gap-6">
               <div className='flex gap-2'>
                 {/* grade buttons 0 / 1 / 2 */}
                 <div className="flex">
@@ -217,63 +210,40 @@ export default function Grading() {
                     </Button>
                   ))}
                 </div>
-
                 <Button
                   onClick={save}
-                  disabled={
-                    isSaving ||
-                    grade == null ||        // nothing selected
-                    grade === savedGrade    // no change
-                  }
-                  className='font-bold text-2xl border p-6'
+                  disabled={saving||grade==null||grade===savedGrade}
+                  className='p-6 text-2xl font-bold'
                 >
-                  {isSaving ? <RotateCw className="animate-spin"/> : 'Save'}
+                  {saving?<RotateCw className="animate-spin"/>:'Save'}
                 </Button>
               </div>
-              
-              <div className="flex items-center space-x-2 text-2xl font-bold">
-                <Button className='p-6' onClick={prevTen} disabled={respIdx === 0}>
-                  <ChevronsLeft/>
-                </Button>
-                <Button className='p-6' onClick={prev} disabled={respIdx === 0}>
-                  <ChevronLeft/>
-                </Button>
-                <span className='px-2'>{respIdx + 1}/{responses.length}</span>
-                <Button className='p-6' onClick={next} disabled={respIdx === responses.length - 1}>
-                  <ChevronRight/>
-                </Button>
-                <Button className='p-6' onClick={nextTen} disabled={respIdx === responses.length - 1}>
-                  <ChevronsRight/>
-                </Button>
-              </div>
+
+              {/* student nav */}
+              {/*<div className="flex items-center gap-4">
+                <Button onClick={()=>setStuIdx(i=>Math.max(0,i-1))}
+                        disabled={stuIdx===0}><ChevronLeft/></Button>
+                <span>
+                  Student {stuIdx+1}/{students.length}
+                </span>
+                <Button onClick={()=>
+                  setStuIdx(i=>Math.min(students.length-1,i+1))}
+                  disabled={stuIdx===students.length-1}
+                ><ChevronRight/></Button>
+              </div>*/}
             </CardContent>
           </Card>
-          <Card className='max-w-screen-lg mx-auto flex flex-col justify-between'>
-            <CardContent className='mt-6 gap-2 flex flex-wrap justify-center'>
-              {responses.map((resp, i) => (
-                <div
-                  key={i}
-                  className={`border w-12 h-12 hover:border-2 hover:border-accent transition-all rounded flex items-center justify-center cursor-pointer
-                  ${i === respIdx ? 'border-accent border-4' : ''}
-                  ${resp.grades[gradingId] ? 'bg-accent' : ''}`}
-                  onClick={() => setRespIdx(i)}
-                >
-                  <span className='text-2xl font-bold'>{i + 1}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          </>
         )}
 
-        {/* No responses */}
-        {selectedTask && responses.length === 0 && (
-          <div className="flex justify-center"><p>Fetching responses...</p> <RotateCw className='ml-2 animate-spin'/></div>
-        )}
-        {tasks.length === 0 && (
-          <div className="flex justify-center"><p>Fetching tasks...</p> <RotateCw className='ml-2 animate-spin'/></div>
-        )}
-
+        {tasks.length == 0 ? (
+          <div className="flex justify-center items-center gap-2">
+            <RotateCw className="animate-spin"/><p>Fetching Tasks...</p>
+          </div>
+        ) : (task != null && !resp) ? (
+          <div className="flex justify-center items-center gap-2">
+            <RotateCw className="animate-spin"/><p>{students.length > 0 ? "Loading Responses..." : "Loading Students..."}</p>
+          </div>
+          ) : null}
       </div>
     </Layout>
   );
