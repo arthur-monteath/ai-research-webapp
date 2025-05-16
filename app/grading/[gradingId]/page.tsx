@@ -31,13 +31,15 @@ export default function Grading() {
 
   const [tasks, setTasks]               = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [responses, setResponses]       = useState<Response[]>([]);
-  const [current, setCurrent]           = useState(0);
 
   const [savedGrade, setSavedGrade]     = useState<number | null>(null); // sheet value
   const [grade, setGrade]               = useState<number | null>(null); // selected value
 
   const [isSaving, setIsSaving]         = useState(false);
+
+  const [questionIdx, setQuestionIdx]   = useState(0);
+  const [responses, setResponses]       = useState<Response[]>([]);
+  const [respIdx,     setRespIdx]       = useState(0);
 
   /* ---- fetch task list ---- */
   useEffect(() => {
@@ -47,16 +49,21 @@ export default function Grading() {
       .catch(console.error);
   }, []);
 
+  useEffect(() => {
+    if (selectedTask) loadResponses(selectedTask, questionIdx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [questionIdx, selectedTask]);
+
   /* ---- select task and load responses ---- */
-  const selectTask = async (task: Task) => {
+  const loadResponses = async (task: Task, qIdx: number) => {
     setSelectedTask(task);
     setResponses([]);
-    setCurrent(0);
+    setRespIdx(0);
     setGrade(null);
     setSavedGrade(null);
 
     if (!task.questions.length) return;
-    const q = task.questions[0];
+    const q = task.questions[qIdx];
 
     try {
       const r = await fetch(`/api/${task.id}/${q.id}/responses`);
@@ -70,7 +77,7 @@ export default function Grading() {
 
   /* ---- hydrate when index / responses change ---- */
   useEffect(() => {
-    const resp = responses[current];
+    const resp = responses[respIdx];
     if (!resp) return;
 
     const raw = resp.grades[gradingId] ?? '';
@@ -79,19 +86,25 @@ export default function Grading() {
 
     setSavedGrade(normalized);
     setGrade(normalized);          // start with current sheet value
-  }, [current, responses, gradingId]);
+  }, [respIdx, responses, gradingId]);
 
   /* ---- nav helpers ---- */
-  const prevTen = () => setCurrent(i => Math.max(0, i - 10));
-  const nextTen = () => setCurrent(i => Math.min(responses.length - 1, i + 10));
+  const prevTen = () => setRespIdx(i => Math.max(0, i - 10));
+  const nextTen = () => setRespIdx(i => Math.min(responses.length - 1, i + 10));
 
-  const prev = () => setCurrent(i => Math.max(0, i - 1));
-  const next = () => setCurrent(i => Math.min(responses.length - 1, i + 1));
+  const prev = () => setRespIdx(i => Math.max(0, i - 1));
+  const next = () => setRespIdx(i => Math.min(responses.length - 1, i + 1));
+
+  const prevQ = () => setQuestionIdx(i => Math.max(0, i - 1));
+  const nextQ = () =>
+    setQuestionIdx(i =>
+      Math.min((selectedTask?.questions.length ?? 1) - 1, i + 1)
+  );
 
   /* ---- save ---- */
   const save = async () => {
     if (!selectedTask) return;
-    const resp = responses[current];
+    const resp = responses[respIdx];
     if (!resp || grade == null || grade === savedGrade) return;
 
     setIsSaving(true);
@@ -101,7 +114,7 @@ export default function Grading() {
         headers: { 'Content-Type': 'application/json' },
         body   : JSON.stringify({
           taskId    : selectedTask.id,
-          questionId: selectedTask.questions[0].id,
+          questionId: selectedTask.questions[questionIdx].id,
           studentId : resp.studentId,
           gradingId,
           value     : grade,
@@ -112,7 +125,7 @@ export default function Grading() {
       // optimistic update
       setResponses(rs =>
         rs.map((x, i) =>
-          i === current
+          i === respIdx
             ? { ...x, grades: { ...x.grades, [gradingId]: String(grade) } }
             : x
         )
@@ -125,6 +138,17 @@ export default function Grading() {
     }
   };
 
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp')   prevQ();
+      if (e.key === 'ArrowDown') nextQ();
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [prev, next, prevQ, nextQ]);
+
   /* ---- UI ---- */
   return (
     <Layout>
@@ -134,7 +158,7 @@ export default function Grading() {
         {!selectedTask && (
           <div className="flex flex-wrap gap-4 justify-center">
             {tasks.map(t => (
-              <Card key={t.id} className="cursor-pointer" onClick={() => selectTask(t)}>
+              <Card key={t.id} className="cursor-pointer" onClick={() => loadResponses(t, questionIdx)}>
                 <CardHeader><CardTitle>{t.title}</CardTitle></CardHeader>
                 <CardFooter>Questions: {t.questions.length}</CardFooter>
               </Card>
@@ -146,15 +170,29 @@ export default function Grading() {
         {selectedTask && responses.length > 0 && (
           <Card className='max-w-screen-lg mx-auto min-h-96 flex flex-col justify-between'>
             <CardHeader className=''>
+              <div className='flex items-center space-x-2 text-2xl font-bold mb-6'>
+                <Button onClick={prevQ} disabled={questionIdx === 0}>
+                  <ChevronLeft />
+                </Button>
+                <span className="text-2xl px-2 font-bold text-center">
+                  Question {questionIdx + 1}/{selectedTask.questions.length}
+                </span>
+                <Button
+                  onClick={nextQ}
+                  disabled={questionIdx === selectedTask.questions.length - 1}
+                >
+                  <ChevronRight />
+                </Button>
+              </div>
               <div className='flex lg:flex-row justify-between gap-8'>
                 <div className="max-w-prose flex-1">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {selectedTask.questions[0].text}
+                    {selectedTask.questions[questionIdx].text}
                   </ReactMarkdown>
                 </div>
 
                 <div className="max-w-prose mb-4 p-4 border rounded flex-1">
-                    {responses[current].answer || 'No response'}
+                    {responses[respIdx].answer || 'No response'}
                 </div>
               </div>
             </CardHeader>
@@ -193,17 +231,17 @@ export default function Grading() {
               </div>
               
               <div className="flex items-center space-x-2 text-2xl font-bold">
-                <Button className='p-6' onClick={prevTen} disabled={current === 0}>
+                <Button className='p-6' onClick={prevTen} disabled={respIdx === 0}>
                   <ChevronsLeft/>
                 </Button>
-                <Button className='p-6' onClick={prev} disabled={current === 0}>
+                <Button className='p-6' onClick={prev} disabled={respIdx === 0}>
                   <ChevronLeft/>
                 </Button>
-                <span className='px-2'>{current + 1}/{responses.length}</span>
-                <Button className='p-6' onClick={next} disabled={current === responses.length - 1}>
+                <span className='px-2'>{respIdx + 1}/{responses.length}</span>
+                <Button className='p-6' onClick={next} disabled={respIdx === responses.length - 1}>
                   <ChevronRight/>
                 </Button>
-                <Button className='p-6' onClick={nextTen} disabled={current === responses.length - 1}>
+                <Button className='p-6' onClick={nextTen} disabled={respIdx === responses.length - 1}>
                   <ChevronsRight/>
                 </Button>
               </div>
