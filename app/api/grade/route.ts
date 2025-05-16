@@ -1,76 +1,82 @@
-// api/grade/route.ts
+// app/api/grade/route.ts
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+import { google }       from 'googleapis';
+
+const COLUMN_MAP: Record<string, string> = {
+  Grade1: 'H',
+  Grade2: 'I',
+  Grade3: 'J',
+  Grade4: 'K',
+  Grade5: 'L',
+  Grade6: 'M',
+};
 
 export async function POST(request: Request) {
   const {
     studentId,
     taskId,
     questionId,
-    grade,
-    status,    // X or O
-    comment,   // your text
+    gradingId,   // "Grade1" … "Grade6"
+    value,       // score to write
   } = await request.json();
 
-  const serviceAccountKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  const spreadsheetId     = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
-  if (!serviceAccountKey || !spreadsheetId) {
-    return NextResponse.json(
-      { error: 'Missing GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_SHEETS_SPREADSHEET_ID' },
-      { status: 500 }
-    );
+  /* ---------- auth ---------- */
+  const key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  const ss  = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  if (!key || !ss) {
+    return NextResponse.json({ error: 'Missing credentials' }, { status: 500 });
   }
-
-  const decodedKey = JSON.parse(
-    Buffer.from(serviceAccountKey, 'base64').toString('utf8')
-  );
-  const auth = new google.auth.GoogleAuth({
-    credentials: decodedKey,
+  const creds = JSON.parse(Buffer.from(key, 'base64').toString('utf8'));
+  const auth  = new google.auth.GoogleAuth({
+    credentials: creds,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   const sheets = google.sheets({ version: 'v4', auth });
 
-  try {
-    // fetch all rows
-    const resp = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Responses!A:K',
-    });
-    const rows = resp.data.values || [];
-
-    // locate the row
-    const idx = rows.findIndex(r =>
-      r[1] === studentId &&
-      r[2] === String(taskId) &&
-      r[3] === String(questionId)
+  /* ---------- validate gradingId ---------- */
+  const colLetter = COLUMN_MAP[gradingId];
+  if (!colLetter) {
+    return NextResponse.json(
+      { error: `Unknown gradingId "${gradingId}"` },
+      { status: 400 },
     );
-    if (idx <= 0) {
+  }
+
+  try {
+    /* ---------- locate row ---------- */
+    const full = await sheets.spreadsheets.values.get({
+      spreadsheetId: ss,
+      range: 'Responses!A:M',
+    });
+    const rows = full.data.values || [];
+
+    const idx = rows.findIndex(
+      (r) =>
+        r[1] === studentId &&   // col B
+        r[2] === taskId    &&   // col C
+        r[3] === questionId     // col D
+    );
+
+    if (idx < 1) {                   // 0 is header
       return NextResponse.json({ error: 'Row not found' }, { status: 404 });
     }
-    const rowNumber = idx + 1;
+    const rowNum = idx + 1;          // 1-based for A1 notation
 
-    // write H:K → [Grading Status, Comments, Correct, Grade]
-    const updateRange = `Responses!H${rowNumber}:K${rowNumber}`;
+    /* ---------- write value ---------- */
+    const range = `Responses!${colLetter}${rowNum}`;
     await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: updateRange,
+      spreadsheetId: ss,
+      range,
       valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[
-          'graded',            // H: Grading Status
-          comment  || '',      // I: Comments
-          status   || '',      // J: Correct (X/O)
-          String(grade)        // K: Grade
-        ]]
-      },
+      requestBody: { values: [[value]] },
     });
 
     return NextResponse.json({ success: true });
   } catch (e: any) {
-    console.error(e);
+    console.error('Error writing grade:', e);
     return NextResponse.json(
-      { error: 'Error updating grading', details: e.message },
-      { status: 500 }
+      { error: 'Error writing grade', details: e.message || String(e) },
+      { status: 500 },
     );
   }
 }

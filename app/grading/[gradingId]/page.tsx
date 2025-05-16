@@ -1,19 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Layout from '@/components/layout';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import Layout          from '@/components/layout';
+import { Button }      from '@/components/ui/button';
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardFooter,
+  Card, CardHeader, CardTitle, CardContent, CardFooter,
 } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, RotateCw, Check, X } from 'lucide-react';
-import { useParams } from 'next/navigation';
+import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { useParams }   from 'next/navigation';
 
+/* ---------- data types ---------- */
 type Task = {
   id: string;
   title: string;
@@ -24,24 +20,21 @@ type Task = {
 type Response = {
   studentId: string;
   answer: string;
-  gradingStatus: string;
-  comment: string;
-  status: 'X' | 'O';
-  grade: number | null;
+  grades: Record<string, string>; // Grade1…Grade6 (strings from the sheet)
 };
 
+/* ---------- component ---------- */
 export default function Grading() {
+  const { gradingId } = useParams() as { gradingId: string }; // e.g. "Grade3"
+
   const [tasks, setTasks]               = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [responses, setResponses]       = useState<Response[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [current, setCurrent]           = useState(0);
   const [grade, setGrade]               = useState<number | null>(null);
-  const [status, setStatus]             = useState<'X'|'O'>('X');
-  const [comment, setComment]           = useState('');
-  const [isUpdating, setIsUpdating]     = useState(false);
-  const gradingId = useParams().gradingId;
+  const [isSaving, setIsSaving]         = useState(false);
 
-  // 1) fetch tasks on mount
+  /* ---- fetch task list once ---- */
   useEffect(() => {
     fetch('/api/tasks')
       .then((r) => r.json())
@@ -49,79 +42,77 @@ export default function Grading() {
       .catch(console.error);
   }, []);
 
-  // 2) when a task is selected, fetch its first question's responses
+  /* ---- select task & load responses ---- */
   const selectTask = async (task: Task) => {
     setSelectedTask(task);
-    setCurrentIndex(0);
     setResponses([]);
+    setCurrent(0);
     setGrade(null);
-    setStatus('X');
-    setComment('');
 
     if (!task.questions.length) return;
     const q = task.questions[0];
     try {
-      const res = await fetch(`/api/${task.id}/${q.id}/responses`);
-      if (!res.ok) throw new Error(res.statusText);
-      const { responses } = await res.json();
+      const r = await fetch(`/api/${task.id}/${q.id}/responses`);
+      if (!r.ok) throw new Error(r.statusText);
+      const { responses } = await r.json();
       setResponses(responses);
     } catch (e) {
       console.error('Failed to load responses:', e);
     }
   };
 
-  // 3) hydrate form fields when currentIndex or responses change
+  /* ---- hydrate grade when index / responses change ---- */
   useEffect(() => {
-    const r = responses[currentIndex];
-    if (r) {
-      setGrade(r.grade);
-      setStatus(r.status);
-      setComment(r.comment);
-    }
-  }, [currentIndex, responses]);
+    const resp = responses[current];
+    if (!resp) return;
+    const raw = resp.grades[gradingId] ?? '';
+    const n   = raw === '' ? null : parseInt(raw, 10);
+    setGrade(Number.isNaN(n) ? null : n);
+  }, [current, responses, gradingId]);
 
-  // 4) navigation helpers
-  const prev = () => setCurrentIndex((i) => Math.max(0, i - 1));
-  const next = () => setCurrentIndex((i) => Math.min(responses.length - 1, i + 1));
+  /* ---- nav helpers ---- */
+  const prev = () => setCurrent((i) => Math.max(0, i - 1));
+  const next = () => setCurrent((i) => Math.min(responses.length - 1, i + 1));
 
-  // 5) submit grading
-  const submit = async () => {
+  /* ---- save grade ---- */
+  const save = async () => {
     if (!selectedTask) return;
-    const resp = responses[currentIndex];
+    const resp = responses[current];
     if (!resp || grade == null) return;
-    setIsUpdating(true);
+    setIsSaving(true);
     try {
-      const res = await fetch('/api/grade', {
+      const r = await fetch('/api/grade', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskId:      selectedTask.id,
-          questionId:  selectedTask.questions[0].id,
-          studentId:   resp.studentId,
-          grade,
-          status,
-          comment,
+          taskId:     selectedTask.id,
+          questionId: selectedTask.questions[0].id,
+          studentId:  resp.studentId,
+          gradingId,          // "Grade1"… "Grade6"
+          value:      grade,   // number 0-2
         }),
       });
-      if (!res.ok) throw new Error(res.statusText);
-      // locally update
-      setResponses((rs) =>
-        rs.map((r,i) => i === currentIndex ? { ...r, grade, status, comment } : r)
-      );
+      if (!r.ok) throw new Error(r.statusText);
+
+      // optimistic local update
+      setResponses(rs => rs.map((x,i) =>
+        i === current ? { ...x, grades: { ...x.grades, [gradingId]: String(grade) } } : x
+      ));
     } catch (e) {
-      console.error('Error submitting grade:', e);
+      console.error('Error saving grade:', e);
     } finally {
-      setIsUpdating(false);
+      setIsSaving(false);
     }
   };
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Task chooser */}
+
+        {/* ---------- Task chooser ---------- */}
         {!selectedTask && (
           <div className="flex flex-wrap gap-4">
-            {tasks.map((t) => (
+            {tasks.map(t => (
               <Card key={t.id} className="cursor-pointer" onClick={() => selectTask(t)}>
                 <CardHeader><CardTitle>{t.title}</CardTitle></CardHeader>
                 <CardFooter>Questions: {t.questions.length}</CardFooter>
@@ -130,74 +121,57 @@ export default function Grading() {
           </div>
         )}
 
-        {/* Grading panel */}
+        {/* ---------- Grading panel ---------- */}
         {selectedTask && responses.length > 0 && (
           <Card>
-            <CardHeader className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                Q: {selectedTask.questions[0].text}
-              </h2>
+            <CardHeader>
+              <CardTitle>{selectedTask.questions[0].text}</CardTitle>
             </CardHeader>
+
             <CardContent>
+
               <div className="mb-4 p-4 border rounded">
-                {responses[currentIndex].answer || 'No response'}
+                {responses[current].answer || 'No response'}
               </div>
+
               <div className="flex items-center space-x-2 mb-4">
-                <Button onClick={prev} disabled={currentIndex === 0}>
-                  <ChevronLeft />
-                </Button>
-                <span>{currentIndex + 1} / {responses.length}</span>
-                <Button onClick={next} disabled={currentIndex === responses.length - 1}>
-                  <ChevronRight />
+                <Button onClick={prev} disabled={current === 0}><ChevronLeft/></Button>
+                <span>{current + 1}/{responses.length}</span>
+                <Button onClick={next} disabled={current === responses.length - 1}>
+                  <ChevronRight/>
                 </Button>
               </div>
-              <div className="flex items-center space-x-2 mb-4">
-                {/* status toggle */}
-                <Button
-                disabled={true}
-                  onClick={() => setStatus(status === 'X' ? 'O' : 'X')}
-                  className="w-10 h-10"
-                  style={{ backgroundColor: status==='X' ? '#f87171' : '#4ade80', color:'white' }}
-                >
-                  {status==='X' ? <X/> : <Check/>}
-                </Button>
 
-                {/* grade buttons */}
-                <div className="flex">
-                  {[0,1,2].map((v) => (
-                    <Button
-                      key={v}
-                      variant={grade===v ? 'default':'outline'}
-                      onClick={() => setGrade(v)}
-                      className={
-                        'font-bold ' +
-                        (v===0?'rounded-l-lg ':v===2?'rounded-r-lg ':'')
-                      }
-                    >
-                      {v}
-                    </Button>
-                  ))}
-                </div>
+              {/* grade buttons 0/1/2 */}
+              <div className="flex mb-4">
+                {[0,1,2].map(v => (
+                  <Button
+                    key={v}
+                    variant={grade===v ? 'default':'outline'}
+                    onClick={() => setGrade(v)}
+                    className={
+                      (v===0?'rounded-l-lg ':'') +
+                      (v===2?'rounded-r-lg ':'') +
+                      'font-bold'
+                    }
+                  >
+                    {v}
+                  </Button>
+                ))}
               </div>
 
-              <Textarea
-                placeholder="Comment"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                className="w-full mb-4"
-              />
-
-              <Button onClick={submit} disabled={isUpdating}>
-                {isUpdating ? <RotateCw className="animate-spin"/> : 'Submit'}
+              <Button onClick={save} disabled={isSaving || grade==null}>
+                {isSaving ? <RotateCw className="animate-spin"/> : 'Save'}
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* no responses */}
+        {/* ---------- no responses ---------- */}
         {selectedTask && responses.length === 0 && (
-          <p>Select a task with at least one question & responses.</p>
+          <p>No responses for this question.</p>
         )}
+
       </div>
     </Layout>
   );
