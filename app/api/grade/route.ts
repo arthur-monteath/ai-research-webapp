@@ -8,9 +8,11 @@ const COLUMN_MAP: Record<string, string> = {
   Grade3: 'J',
   Grade4: 'K',
   Grade5: 'L',
-  FinalGrade: 'M',
+  GradeFinal: 'M',
   GradeAI: 'N',
 };
+
+const ALLOWED_GRADERS = new Set(['Grade1','Grade2','Grade3','Grade4','Grade5']);
 
 export async function POST(request: Request) {
   const {
@@ -19,7 +21,14 @@ export async function POST(request: Request) {
     questionId,
     gradingId,   // "Grade1" … "Grade6"
     value,       // score to write
-  } = await request.json();
+  } = await request.json().catch(() => ({}));
+
+  if (!studentId || !taskId || !questionId || value === undefined || value === null) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+  if (!gradingId || !ALLOWED_GRADERS.has(gradingId)) {
+    return NextResponse.json({ error: `Invalid gradingId "${gradingId}"` }, { status: 400 });
+  }
 
   /* ---------- auth ---------- */
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -34,60 +43,40 @@ export async function POST(request: Request) {
   });
   const sheets = google.sheets({ version: 'v4', auth });
 
-  /* ---------- validate gradingId ---------- */
-  const colLetter = COLUMN_MAP[gradingId];
-  if (!colLetter) {
-    return NextResponse.json(
-      { error: `Unknown gradingId "${gradingId}"` },
-      { status: 400 },
-    );
-  }
-
   try {
-    /* ---------- locate row ---------- */
+    // Find the row (header is row 1)
     const full = await sheets.spreadsheets.values.get({
       spreadsheetId: ss,
-      range: 'Responses!A:N',
+      range: 'Responses!A:D',
     });
     const rows = full.data.values || [];
-
-    const idx = rows.findIndex(
-      (r) =>
-        r[1] === studentId &&   // col B
-        r[2] === taskId    &&   // col C
-        r[3] === questionId     // col D
+    const idx = rows.findIndex((r, i) =>
+      i > 0 &&
+      String(r[1]) === String(studentId) &&
+      String(r[2]) === String(taskId) &&
+      String(r[3]) === String(questionId)
     );
+    if (idx < 0) return NextResponse.json({ error: 'Row not found' }, { status: 404 });
 
-    if (idx < 1) {                   // 0 is header
-      return NextResponse.json({ error: 'Row not found' }, { status: 404 });
-    }
-    const rowNum = idx + 1;          // 1-based for A1 notation
+    const rowNum = idx + 1; // A1 is 1-based
+    const graderCol = COLUMN_MAP[gradingId];
+    const finalCol  = COLUMN_MAP['GradeFinal'];
 
-    /* ---------- write value ---------- */
-    const range = `Responses!${colLetter}${rowNum}`;
-    await sheets.spreadsheets.values.update({
+    // Write to the grader’s column AND to GradeFinal
+    await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: ss,
-      range,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[value]] },
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          { range: `Responses!${graderCol}${rowNum}`, values: [[value]] },
+          { range: `Responses!${finalCol}${rowNum}`,  values: [[value]] },
+        ],
+      },
     });
-
-    const range2 = `Responses!M${rowNum}`;
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: ss,
-      range: range2,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[value]] },
-    });
-
-    
 
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error('Error writing grade:', e);
-    return NextResponse.json(
-      { error: 'Error writing grade', details: e.message || String(e) },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Error writing grade', details: e.message || String(e) }, { status: 500 });
   }
 }
