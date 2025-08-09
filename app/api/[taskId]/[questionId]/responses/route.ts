@@ -29,7 +29,7 @@ export async function GET(
     // grab Time… through Grade6
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId: id,
-      range: 'Responses!A:M',
+      range: 'Responses!A:N',
     });
     const rows = resp.data.values || [];
 
@@ -47,7 +47,8 @@ export async function GET(
         Grade3: r[9]  || '',
         Grade4: r[10] || '',
         Grade5: r[11] || '',
-        Grade6: r[12] || '',
+        FinalGrade: r[12] || '',
+        GradeAI: r[13] || '',
       }
     }));
 

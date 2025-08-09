@@ -8,7 +8,8 @@ const COLUMN_MAP: Record<string, string> = {
   Grade3: 'J',
   Grade4: 'K',
   Grade5: 'L',
-  Grade6: 'M',
+  FinalGrade: 'M',
+  GradeAI: 'N',
 };
 
 export async function POST(request: Request) {
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     /* ---------- locate row ---------- */
     const full = await sheets.spreadsheets.values.get({
       spreadsheetId: ss,
-      range: 'Responses!A:M',
+      range: 'Responses!A:N',
     });
     const rows = full.data.values || [];
 
@@ -70,6 +71,16 @@ export async function POST(request: Request) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[value]] },
     });
+
+    const range2 = `Responses!M${rowNum}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: ss,
+      range: range2,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[value]] },
+    });
+
+    
 
     return NextResponse.json({ success: true });
   } catch (e: any) {

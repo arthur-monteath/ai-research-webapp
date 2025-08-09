@@ -53,6 +53,37 @@ export default function GradeByStudent() {
     fetch('/api/tasks').then(r=>r.json()).then(setTasks).catch(console.error);
   }, []);
 
+  const toNum = (x: any): number | null => {
+    const n = parseInt(String(x ?? ''), 10);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const consolidateIfNeeded = async () => {
+  if (!task || !resp) return;
+  // Only consolidate when nothing saved AND user didn't pick a grade
+  if (savedGrade == null && grade == null) {
+    const ai = toNum(resp.grades["GradeAI"]);
+    if (ai != null) {
+      try {
+        await fetch('/api/grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: task.id,
+            questionId: task.questions[questionIdx].id,
+            studentId: resp.studentId,
+            value: ai, // always goes to Grade6 server-side
+          }),
+        });
+        setSaved(ai);
+      } catch (e) {
+        console.error('Auto-consolidate failed', e);
+      }
+    }
+  }
+};
+
+
   /* when a task is chosen, pull list of studentIds from Q1 */
   const chooseTask = async (t: Task) => {
     setTask(t);
@@ -75,12 +106,10 @@ export default function GradeByStudent() {
     const r = studentResponses[questionIdx] || null;
     setResp(r);
   
-    const g = r?.grades[gradingId] ?? '';
-    const n = g === '' ? null : parseInt(g, 10);
-    const norm = Number.isNaN(n) ? null : n;
-    setSaved(norm);
-    setGrade(norm);
-  }, [questionIdx, studentResponses, gradingId]);
+    const saved = toNum(r?.grades['FinalGrade']); // <- always Grade6
+    setSaved(saved);
+    setGrade(saved ?? null); // if there is a saved grade, select it; otherwise keep null
+  }, [questionIdx, studentResponses]);
 
   /* fetch every question’s response for a single student (array aligned to questions) */
 const fetchAllForStudent = async (t: Task, stuId: string) => {
@@ -93,11 +122,9 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
     setStudentResponses(list);
     setResp(list[0]);
       // initialise grading state
-    const g = list[0]?.grades[gradingId] ?? '';
-    const n = g === '' ? null : parseInt(g, 10);
-    const norm = Number.isNaN(n) ? null : n;
-    setSaved(norm);
-    setGrade(norm);
+    const saved = toNum(list[0]?.grades['FinalGrade']);
+    setSaved(saved);
+    setGrade(saved ?? null);
   };
 
   /* save */
@@ -105,17 +132,17 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
     if (!task || !resp || grade==null || grade===savedGrade) return;
     setSaving(true);
     try {
-      await fetch('/api/grade',{
+      await fetch('/api/grade', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          taskId:task.id,
-          questionId:task.questions[questionIdx].id,
-          studentId:resp.studentId,
-          gradingId,
-          value:grade,
+          taskId: task.id,
+          questionId: task.questions[questionIdx].id,
+          studentId: resp.studentId,
+          value: grade, // grade goes to Grade6 server-side
         })
       });
+
       setSaved(grade);
     }catch(e){console.error(e);}finally{setSaving(false);}
   };
@@ -144,12 +171,14 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
               <Button
                 key={s}
                 variant={i===stuIdx?'default':'outline'}
-                onClick={()=>{
+                onClick={async ()=>{
+                  await consolidateIfNeeded();
                   setResp(null);
                   setStuIdx(i);
                   setQuestionIdx(0);
-                  fetchAllForStudent(task!, students[i]);            
+                  fetchAllForStudent(task!, students[i]);
                 }}
+
               >
                 {s}
               </Button>
@@ -165,16 +194,21 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
               </h2>
               {/* question nav */}
               <div className="flex items-center gap-4">
-                <Button onClick={()=>setQuestionIdx(i=>Math.max(0,i-1))}
-                        disabled={questionIdx===0}><ChevronLeft/></Button>
+                <Button onClick={async () => {
+    await consolidateIfNeeded();
+    setQuestionIdx(i => Math.max(0, i - 1));
+  }}
+  disabled={questionIdx===0}><ChevronLeft/></Button>
 
                 <span>
                   Q {questionIdx+1}/{task.questions.length}
                 </span>
 
-                <Button onClick={()=>
-                  setQuestionIdx(i=>Math.min(task.questions.length-1,i+1))}
-                  disabled={questionIdx===task.questions.length-1}
+                <Button onClick={async () => {
+    await consolidateIfNeeded();
+    setQuestionIdx(i => Math.min(task!.questions.length - 1, i + 1));
+  }}
+  disabled={questionIdx===task.questions.length-1}
                 ><ChevronRight/></Button>
               </div>
 
@@ -196,20 +230,40 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
               <div className='flex gap-2'>
                 {/* grade buttons 0 / 1 / 2 */}
                 <div className="flex">
-                  {[0,1,2].map(v => (
-                    <Button
-                      key={v}
-                      variant={grade === v ? 'default' : 'outline'}
-                      onClick={() => setGrade(v)}
-                      className={ 'rounded-none ' +
-                        (v === 0 ? 'rounded-l-lg' : '') +
-                        (v === 2 ? 'rounded-r-lg' : '') +
-                        ' font-bold text-2xl border p-6'
-                      }
-                    >
-                      {v}
-                    </Button>
-                  ))}
+                  {[0,1,2].map(v => {
+
+                    const ai = toNum(resp?.grades["GradeAI"]);
+                    const showAiHighlight = savedGrade == null && grade == null; // only when untouched
+
+                    const isSelected = grade === v;
+                    const isAi = ai === v;
+
+                    // show green "highlight" ring when untouched & this is the AI grade
+                    const highlightClass =
+                      showAiHighlight && isAi ? 'ring-2 ring-emerald-500 border-emerald-500' : '';
+
+                    // if user selected a different grade, give AI grade a green border only
+                    const aiBorderOnly =
+                      !showAiHighlight && isAi && grade != null && grade !== ai ? 'border-2 border-emerald-500' : '';
+
+                    return (
+                      <Button
+                        key={v}
+                        variant={isSelected ? 'default' : 'outline'}
+                        onClick={() => setGrade(v)}
+                        className={
+                          'rounded-none ' +
+                          (v === 0 ? 'rounded-l-lg' : '') +
+                          (v === 2 ? 'rounded-r-lg' : '') +
+                          ' font-bold text-2xl border p-6 ' +
+                          highlightClass + ' ' + aiBorderOnly
+                        }
+                      >
+                        {v}
+                      </Button>
+                    );
+                  })}
+
                 </div>
                 <Button
                   onClick={save}
