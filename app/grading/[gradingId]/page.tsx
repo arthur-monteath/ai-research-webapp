@@ -386,7 +386,7 @@ export default function GradeByStudent() {
                 </div>
 
                 <Button
-                  onClick={canConfirmAI ? () => ai != null && saveGrade(ai) : () => grade != null && saveGrade(grade)}
+                  onClick={gotoNext}
                   disabled={saving}
                   className={
                     (canConfirmAI ? false : grade == null || grade === savedGrade) ? 'hidden' : 'p-6 text-2xl font-bold'
