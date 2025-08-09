@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Layout from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { ChevronLeft, ChevronRight, RotateCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCw, Eye, EyeOff } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -67,6 +67,18 @@ export default function GradeByStudent() {
   /* completion + UI state */
   const [completedByStudent, setCompletedByStudent] = useState<Record<string, boolean>>({});
   const [showAllStudents, setShowAllStudents] = useState(false);
+
+  // NEW: collapsible question statement
+  const [showQuestion, setShowQuestion] = useState(true);
+  useEffect(() => {
+    const v = typeof window !== 'undefined' ? localStorage.getItem('grading.showQuestion') : null;
+    if (v !== null) setShowQuestion(v === '1');
+  }, []);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('grading.showQuestion', showQuestion ? '1' : '0');
+    }
+  }, [showQuestion]);
 
   /* derived */
   const resp: Response | null = useMemo(
@@ -200,7 +212,7 @@ export default function GradeByStudent() {
   }, [questionIdx]);
 
   const gotoNext = useCallback(async () => {
-    // forward-only save: commit user change or auto-accept AI if untouched
+    // forward-only save
     if (grade != null && grade !== savedGrade) {
       await saveGrade(grade);
     } else if (savedGrade == null && grade == null && ai != null) {
@@ -209,37 +221,24 @@ export default function GradeByStudent() {
 
     if (task == null) return;
 
-    if (!isLastQuestion) {
+    if (questionIdx < (task.questions.length - 1)) {
       setQuestionIdx((i) => i + 1);
       return;
     }
 
-    // last question: move to next student (if any)
-    if (hasNextStudent) {
+    // last question -> next student
+    if (stuIdx < students.length - 1) {
       const nextIdx = stuIdx + 1;
       setStuIdx(nextIdx);
       setQuestionIdx(0);
       setStudentResponses([]);
       fetchAllForStudent(task, students[nextIdx]);
-      // keep showAllStudents as-is
     }
-    // if no next student, do nothing (button will be disabled)
-  }, [
-    grade,
-    savedGrade,
-    ai,
-    saveGrade,
-    isLastQuestion,
-    hasNextStudent,
-    stuIdx,
-    task,
-    fetchAllForStudent,
-    students,
-  ]);
+  }, [grade, savedGrade, ai, saveGrade, task, questionIdx, stuIdx, students, fetchAllForStudent]);
 
   const selectStudent = useCallback(
     (i: number) => {
-      // No saving on student change by request
+      // No saving on student change
       setStuIdx(i);
       setQuestionIdx(0);
       setStudentResponses([]);
@@ -272,10 +271,7 @@ export default function GradeByStudent() {
             <div className="flex items-center gap-3 justify-center">
               <span className="text-sm opacity-70">Student:</span>
               <Button variant="default">{students[stuIdx] ?? '-'}</Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowAllStudents((s) => !s)}
-              >
+              <Button variant="outline" onClick={() => setShowAllStudents((s) => !s)}>
                 {showAllStudents ? 'Hide list' : 'See all students'}
               </Button>
             </div>
@@ -310,14 +306,24 @@ export default function GradeByStudent() {
         {task && resp && (
           <Card className="max-w-screen-lg mx-auto flex flex-col">
             <CardHeader className="gap-4">
-              <h2 className="text-xl font-semibold">Student: {resp.studentId}</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Student: {resp.studentId}</h2>
+
+                {/* NEW: toggle question visibility */}
+                <Button
+                  variant="outline"
+                  onClick={() => setShowQuestion((v) => !v)}
+                  aria-pressed={!showQuestion}
+                  title={showQuestion ? 'Hide question' : 'Show question'}
+                >
+                  {showQuestion ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                  {showQuestion ? 'Hide Question' : 'Show Question'}
+                </Button>
+              </div>
 
               {/* question nav */}
               <div className="flex items-center gap-4">
-                <Button
-                  onClick={gotoPrevQuestion}
-                  disabled={questionIdx === 0}
-                >
+                <Button onClick={gotoPrevQuestion} disabled={questionIdx === 0}>
                   <ChevronLeft />
                 </Button>
 
@@ -325,22 +331,24 @@ export default function GradeByStudent() {
                   Q {questionIdx + 1}/{task.questions.length}
                 </span>
 
-                <Button
-                  onClick={gotoNext}
-                  disabled={isLastQuestion && !hasNextStudent}
-                >
+                <Button onClick={gotoNext} disabled={isLastQuestion && !(stuIdx < students.length - 1)}>
                   <ChevronRight />
                 </Button>
               </div>
 
-              <div className="flex flex-col md:flex-row justify-between gap-8">
-                <div className="flex-1">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {task.questions[questionIdx].text}
-                  </ReactMarkdown>
-                </div>
+              {/* statement + response; statement collapsible */}
+              <div className={`flex ${showQuestion ? 'flex-col md:flex-row' : 'flex-col'} justify-between gap-8`}>
+                {showQuestion && (
+                  <div className="flex-1">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {task.questions[questionIdx].text}
+                    </ReactMarkdown>
+                  </div>
+                )}
 
-                <div className="flex-1 border p-4 rounded">{resp.answer || 'No response'}</div>
+                <div className={`${showQuestion ? 'flex-1' : 'w-full'} border p-4 rounded`}>
+                  {resp.answer || 'No response'}
+                </div>
               </div>
             </CardHeader>
 
@@ -380,7 +388,9 @@ export default function GradeByStudent() {
                 <Button
                   onClick={canConfirmAI ? () => ai != null && saveGrade(ai) : () => grade != null && saveGrade(grade)}
                   disabled={saving}
-                  className={((canConfirmAI ? false : grade == null || grade === savedGrade))? "hidden" : "p-6 text-2xl font-bold"}
+                  className={
+                    (canConfirmAI ? false : grade == null || grade === savedGrade) ? 'hidden' : 'p-6 text-2xl font-bold'
+                  }
                 >
                   {saving ? <RotateCw className="animate-spin" /> : canConfirmAI ? 'Confirm' : 'Save'}
                 </Button>
