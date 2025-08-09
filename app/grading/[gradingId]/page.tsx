@@ -111,6 +111,34 @@ export default function GradeByStudent() {
     setGrade(saved ?? null); // if there is a saved grade, select it; otherwise keep null
   }, [questionIdx, studentResponses]);
 
+  const confirmAI = async (ai: number | null) => {
+  if (!task || !resp || ai == null) return;
+  setSaving(true);
+  try {
+    await fetch('/api/grade', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        taskId: task.id,
+        questionId: task.questions[questionIdx].id,
+        studentId: resp.studentId,
+        value: ai, // server writes to GradeFinal
+      })
+    });
+    // reflect the confirmed grade locally
+    setSaved(ai);
+    setGrade(ai);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    setSaving(false);
+  }
+};
+
+const ai = toNum(resp?.grades["GradeAI"]);
+const hasSaved = savedGrade != null;
+const canConfirmAI = !hasSaved && grade == null && ai != null;
+
   /* fetch every question’s response for a single student (array aligned to questions) */
 const fetchAllForStudent = async (t: Task, stuId: string) => {
     const list: (Response|null)[] = await Promise.all(
@@ -244,7 +272,7 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
 
                     // if user selected a different grade, give AI grade a green border only
                     const aiBorderOnly =
-                      !showAiHighlight && isAi && grade != null && grade !== ai ? 'inset-shadow-green-300' : '';
+                      !showAiHighlight && isAi && grade != null && grade !== ai ? 'bg-green-200 border-green-300 border' : '';
 
                     return (
                       <Button
@@ -266,11 +294,14 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
 
                 </div>
                 <Button
-                  onClick={save}
-                  disabled={saving||grade==null||grade===savedGrade}
+                  onClick={canConfirmAI ? () => confirmAI(ai) : save}
+                  disabled={
+                    saving ||
+                    (canConfirmAI ? false : (grade==null || grade===savedGrade))
+                  }
                   className='p-6 text-2xl font-bold'
                 >
-                  {saving?<RotateCw className="animate-spin"/>:'Save'}
+                  {saving ? <RotateCw className="animate-spin"/> : (canConfirmAI ? 'Confirm' : 'Save')}
                 </Button>
               </div>
 
