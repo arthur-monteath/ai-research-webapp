@@ -47,8 +47,7 @@ const postJson = async (url: string, body: unknown): Promise<void> => {
 
 /* ---------- component ---------- */
 export default function GradeByStudent() {
-  // URL param retained for route shape; not used for writes (always GradeFinal)
-  const { gradingId } = useParams() as { gradingId: string };
+  const { gradingId } = useParams() as { gradingId: string }; // used to write Grade1..Grade5
 
   /* selection + data */
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -65,19 +64,23 @@ export default function GradeByStudent() {
   const [grade, setGrade] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
-  /* completion map */
+  /* completion + UI state */
   const [completedByStudent, setCompletedByStudent] = useState<Record<string, boolean>>({});
+  const [showAllStudents, setShowAllStudents] = useState(false);
 
   /* derived */
   const resp: Response | null = useMemo(
     () => studentResponses[questionIdx] || null,
     [studentResponses, questionIdx],
   );
-
   const ai = useMemo(() => toNum(resp?.grades['GradeAI']), [resp]);
   const showAiHighlight = savedGrade == null && grade == null;
   const hasSaved = savedGrade != null;
   const canConfirmAI = !hasSaved && grade == null && ai != null;
+
+  const lastQuestionIdx = useMemo(() => (task ? task.questions.length - 1 : 0), [task]);
+  const isLastQuestion = questionIdx === lastQuestionIdx;
+  const hasNextStudent = stuIdx < students.length - 1;
 
   /* load tasks on mount */
   useEffect(() => {
@@ -97,7 +100,6 @@ export default function GradeByStudent() {
       setCompletedByStudent({});
       return;
     }
-    // fetch all questions once
     const perQuestion = await Promise.all(
       t.questions.map((q) => getJson<ApiResponses>(`/api/${t.id}/${q.id}/responses`)),
     );
@@ -129,7 +131,6 @@ export default function GradeByStudent() {
         }),
       );
       setStudentResponses(list);
-      // initialize saved/grade from first question
       const firstSaved = toNum(list[0]?.grades['GradeFinal']);
       setSavedGrade(firstSaved);
       setGrade(firstSaved ?? null);
@@ -146,12 +147,11 @@ export default function GradeByStudent() {
           taskId: task.id,
           questionId: task.questions[questionIdx].id,
           studentId: resp.studentId,
-          gradingId,
-          value: val, // server writes to GradeFinal (M)
+          gradingId, // write Grade1..Grade5 + mirror to GradeFinal server-side
+          value: val,
         });
         setSavedGrade(val);
         setGrade(val);
-        // reflect locally
         setStudentResponses((prev) => {
           const copy = [...prev];
           const r = copy[questionIdx];
@@ -165,15 +165,8 @@ export default function GradeByStudent() {
         setSaving(false);
       }
     },
-    [task, resp, questionIdx, recomputeCurrentStudentCompleted],
+    [task, resp, questionIdx, gradingId, recomputeCurrentStudentCompleted],
   );
-
-  const consolidateIfNeeded = useCallback(async () => {
-    if (!task || !resp) return;
-    if (savedGrade == null && grade == null && ai != null) {
-      await saveGrade(ai);
-    }
-  }, [task, resp, savedGrade, grade, ai, saveGrade]);
 
   /* choose task */
   const chooseTask = useCallback(
@@ -184,6 +177,7 @@ export default function GradeByStudent() {
       setStudentResponses([]);
       setSavedGrade(null);
       setGrade(null);
+      setShowAllStudents(false);
 
       const ids = await loadStudentIds(t);
       setStudents(ids);
@@ -201,23 +195,57 @@ export default function GradeByStudent() {
   }, [resp]);
 
   /* navigation handlers */
-  const gotoQuestion = useCallback(
-    async (next: number) => {
-      await consolidateIfNeeded();
-      setQuestionIdx(next);
-    },
-    [consolidateIfNeeded],
-  );
+  const gotoPrevQuestion = useCallback(() => {
+    if (questionIdx > 0) setQuestionIdx((i) => i - 1);
+  }, [questionIdx]);
+
+  const gotoNext = useCallback(async () => {
+    // forward-only save: commit user change or auto-accept AI if untouched
+    if (grade != null && grade !== savedGrade) {
+      await saveGrade(grade);
+    } else if (savedGrade == null && grade == null && ai != null) {
+      await saveGrade(ai);
+    }
+
+    if (task == null) return;
+
+    if (!isLastQuestion) {
+      setQuestionIdx((i) => i + 1);
+      return;
+    }
+
+    // last question: move to next student (if any)
+    if (hasNextStudent) {
+      const nextIdx = stuIdx + 1;
+      setStuIdx(nextIdx);
+      setQuestionIdx(0);
+      setStudentResponses([]);
+      fetchAllForStudent(task, students[nextIdx]);
+      // keep showAllStudents as-is
+    }
+    // if no next student, do nothing (button will be disabled)
+  }, [
+    grade,
+    savedGrade,
+    ai,
+    saveGrade,
+    isLastQuestion,
+    hasNextStudent,
+    stuIdx,
+    task,
+    fetchAllForStudent,
+    students,
+  ]);
 
   const selectStudent = useCallback(
-    async (i: number) => {
-      await consolidateIfNeeded();
+    (i: number) => {
+      // No saving on student change by request
       setStuIdx(i);
       setQuestionIdx(0);
       setStudentResponses([]);
       if (task) fetchAllForStudent(task, students[i]);
     },
-    [consolidateIfNeeded, task, students, fetchAllForStudent],
+    [task, students, fetchAllForStudent],
   );
 
   /* UI */
@@ -238,28 +266,45 @@ export default function GradeByStudent() {
           </div>
         )}
 
-        {/* choose student */}
-        <div className="max-w-screen-lg mx-auto mb-12 flex flex-wrap gap-4 justify-center mt-8">
-          {students.map((s, i) => {
-            const isSelected = i === stuIdx;
-            const isComplete = !!completedByStudent[s];
-            const completeClass = isComplete
-              ? isSelected
-                ? 'bg-green-200 hover:bg-green-200 text-black'
-                : 'bg-green-400 hover:bg-green-400 text-black'
-              : '';
-            return (
+        {/* student header + toggle */}
+        {task && students.length > 0 && (
+          <div className="max-w-screen-lg mx-auto mb-4 flex flex-col gap-3">
+            <div className="flex items-center gap-3 justify-center">
+              <span className="text-sm opacity-70">Student:</span>
+              <Button variant="default">{students[stuIdx] ?? '-'}</Button>
               <Button
-                key={s}
-                variant={isSelected ? 'default' : 'outline'}
-                className={completeClass}
-                onClick={() => selectStudent(i)}
+                variant="outline"
+                onClick={() => setShowAllStudents((s) => !s)}
               >
-                {s}
+                {showAllStudents ? 'Hide list' : 'See all students'}
               </Button>
-            );
-          })}
-        </div>
+            </div>
+
+            {showAllStudents && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {students.map((s, i) => {
+                  const isSelected = i === stuIdx;
+                  const isComplete = !!completedByStudent[s];
+                  const completeClass = isComplete
+                    ? isSelected
+                      ? 'bg-green-200 hover:bg-green-200 text-black'
+                      : 'bg-green-400 hover:bg-green-400 text-black'
+                    : '';
+                  return (
+                    <Button
+                      key={s}
+                      variant={isSelected ? 'default' : 'outline'}
+                      className={completeClass}
+                      onClick={() => selectStudent(i)}
+                    >
+                      {s}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* grading panel */}
         {task && resp && (
@@ -270,7 +315,7 @@ export default function GradeByStudent() {
               {/* question nav */}
               <div className="flex items-center gap-4">
                 <Button
-                  onClick={() => questionIdx > 0 && gotoQuestion(Math.max(0, questionIdx - 1))}
+                  onClick={gotoPrevQuestion}
                   disabled={questionIdx === 0}
                 >
                   <ChevronLeft />
@@ -281,11 +326,8 @@ export default function GradeByStudent() {
                 </span>
 
                 <Button
-                  onClick={() =>
-                    questionIdx < task.questions.length - 1 &&
-                    gotoQuestion(Math.min(task.questions.length - 1, questionIdx + 1))
-                  }
-                  disabled={questionIdx === task.questions.length - 1}
+                  onClick={gotoNext}
+                  disabled={isLastQuestion && !hasNextStudent}
                 >
                   <ChevronRight />
                 </Button>
@@ -337,8 +379,8 @@ export default function GradeByStudent() {
 
                 <Button
                   onClick={canConfirmAI ? () => ai != null && saveGrade(ai) : () => grade != null && saveGrade(grade)}
-                  disabled={saving || (canConfirmAI ? false : grade == null || grade === savedGrade)}
-                  className="p-6 text-2xl font-bold"
+                  disabled={saving}
+                  className={((canConfirmAI ? false : grade == null || grade === savedGrade))? "hidden" : "p-6 text-2xl font-bold"}
                 >
                   {saving ? <RotateCw className="animate-spin" /> : canConfirmAI ? 'Confirm' : 'Save'}
                 </Button>
