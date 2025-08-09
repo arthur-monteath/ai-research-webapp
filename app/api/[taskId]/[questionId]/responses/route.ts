@@ -47,7 +47,7 @@ export async function GET(
         Grade3: r[9]  || '',
         Grade4: r[10] || '',
         Grade5: r[11] || '',
-        FinalGrade: r[12] || '',
+        GradeFinal: r[12] || '',
         GradeAI: r[13] || '',
       }
     }));

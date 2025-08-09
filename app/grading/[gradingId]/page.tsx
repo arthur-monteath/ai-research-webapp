@@ -147,7 +147,7 @@ const computeCompletionMap = async (t: Task, ids: string[]) => {
     const r = studentResponses[questionIdx] || null;
     setResp(r);
   
-    const saved = toNum(r?.grades['FinalGrade']); // <- always Grade6
+    const saved = toNum(r?.grades['GradeFinal']); // <- always Grade6
     setSaved(saved);
     setGrade(saved ?? null); // if there is a saved grade, select it; otherwise keep null
   }, [questionIdx, studentResponses]);
@@ -201,7 +201,7 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
     setStudentResponses(list);
     setResp(list[0]);
       // initialise grading state
-    const saved = toNum(list[0]?.grades['FinalGrade']);
+    const saved = toNum(list[0]?.grades['GradeFinal']);
     setSaved(saved);
     setGrade(saved ?? null);
   };
