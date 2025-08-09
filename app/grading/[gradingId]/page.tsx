@@ -240,11 +240,11 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
 
                     // show green "highlight" ring when untouched & this is the AI grade
                     const highlightClass =
-                      showAiHighlight && isAi ? 'ring-2 ring-emerald-500 border-emerald-500' : '';
+                      showAiHighlight && isAi ? 'bg-green-300' : '';
 
                     // if user selected a different grade, give AI grade a green border only
                     const aiBorderOnly =
-                      !showAiHighlight && isAi && grade != null && grade !== ai ? 'border-2 border-emerald-500' : '';
+                      !showAiHighlight && isAi && grade != null && grade !== ai ? 'inset-shadow-green-300' : '';
 
                     return (
                       <Button
