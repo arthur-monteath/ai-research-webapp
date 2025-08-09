@@ -48,6 +48,37 @@ export default function GradeByStudent() {
   const [grade,      setGrade] = useState<number | null>(null);
   const [saving,     setSaving]= useState(false);
 
+  // add near other state
+  const [completedByStudent, setCompletedByStudent] = useState<Record<string, boolean>>({});
+
+  // helper
+const computeCompletionMap = async (t: Task, ids: string[]) => {
+  // fetch responses for all questions once
+  const perQuestion: { responses: Response[] }[] = await Promise.all(
+    t.questions.map(async (q) =>
+      fetch(`/api/${t.id}/${q.id}/responses`).then(r => r.json())
+    )
+  );
+
+  const toNum = (x: any) => {
+    const n = parseInt(String(x ?? ''), 10);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const map: Record<string, boolean> = {};
+  ids.forEach((sid) => {
+    const allGraded = perQuestion.every(({ responses }) => {
+      const r = responses.find((x: Response) => x.studentId === sid);
+      if (!r) return false; // no response for this question → not complete
+      return toNum(r.grades['GradeFinal']) != null;
+    });
+    map[sid] = allGraded;
+  });
+
+  setCompletedByStudent(map);
+};
+
+
   /* fetch tasks once */
   useEffect(() => {
     fetch('/api/tasks').then(r=>r.json()).then(setTasks).catch(console.error);
@@ -76,6 +107,14 @@ export default function GradeByStudent() {
           }),
         });
         setSaved(ai);
+
+        setStudentResponses(prev => {
+          const copy = [...prev];
+          const r = copy[questionIdx];
+          if (r) r.grades['GradeFinal'] = String(ai);
+          recomputeCurrentStudentCompleted(resp.studentId, copy);
+          return copy;
+        });
       } catch (e) {
         console.error('Auto-consolidate failed', e);
       }
@@ -98,6 +137,8 @@ export default function GradeByStudent() {
     const r = await fetch(`/api/${t.id}/${firstQ.id}/responses`).then(r=>r.json());
     const ids = r.responses.map((x: Response) => x.studentId);
     setStudents(ids);
+
+    await computeCompletionMap(t, ids);
 
     if (ids.length) fetchAllForStudent(t, ids[0]);
   };
@@ -139,6 +180,16 @@ const ai = toNum(resp?.grades["GradeAI"]);
 const hasSaved = savedGrade != null;
 const canConfirmAI = !hasSaved && grade == null && ai != null;
 
+const recomputeCurrentStudentCompleted = (sid: string, list: (Response|null)[]) => {
+  const all = list.every(r => {
+    if (!r) return false;
+    const n = toNum(r.grades['GradeFinal']);
+    return n != null;
+  });
+  setCompletedByStudent(prev => ({ ...prev, [sid]: all }));
+};
+
+
   /* fetch every question’s response for a single student (array aligned to questions) */
 const fetchAllForStudent = async (t: Task, stuId: string) => {
     const list: (Response|null)[] = await Promise.all(
@@ -172,7 +223,20 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
       });
 
       setSaved(grade);
-    }catch(e){console.error(e);}finally{setSaving(false);}
+
+      setStudentResponses(prev => {
+      const copy = [...prev];
+      const r = copy[questionIdx];
+      if (r) r.grades['GradeFinal'] = String(grade);
+      // update completion map for this student
+      recomputeCurrentStudentCompleted(resp.studentId, copy);
+      return copy;
+    });
+  } catch(e) {
+    console.error(e);
+  } finally {
+    setSaving(false);
+  }
   };
 
   /* UI */
@@ -195,22 +259,33 @@ const fetchAllForStudent = async (t: Task, stuId: string) => {
 
         {/* choose student */}
         <div className="max-w-screen-lg mx-auto mb-12 flex flex-wrap gap-4 justify-center mt-8">
-            {students.map((s,i)=>(
-              <Button
-                key={s}
-                variant={i===stuIdx?'default':'outline'}
-                onClick={async ()=>{
-                  await consolidateIfNeeded();
-                  setResp(null);
-                  setStuIdx(i);
-                  setQuestionIdx(0);
-                  fetchAllForStudent(task!, students[i]);
-                }}
+            {students.map((s,i)=> {
+  const isSelected = i===stuIdx;
+  const isComplete = !!completedByStudent[s];
 
-              >
-                {s}
-              </Button>
-            ))}
+  const completeClass = isComplete
+    ? (isSelected ? 'bg-green-200 hover:bg-green-200 text-black'
+                  : 'bg-green-400 hover:bg-green-400 text-black')
+    : '';
+
+  return (
+    <Button
+      key={s}
+      variant={isSelected ? 'default' : 'outline'}
+      className={completeClass}   // <- override visual at the end
+      onClick={async ()=>{
+        await consolidateIfNeeded();
+        setResp(null);
+        setStuIdx(i);
+        setQuestionIdx(0);
+        fetchAllForStudent(task!, students[i]);
+      }}
+    >
+      {s}
+    </Button>
+  );
+})}
+
         </div>
 
         {/* grading panel */}
