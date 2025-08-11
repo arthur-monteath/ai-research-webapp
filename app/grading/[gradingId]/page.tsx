@@ -65,7 +65,8 @@ Dependent Variable: Crime rate
 - 15 + 4x = x        => -5
 - 15 + 12x = x       => -1.364
 - 15 + 4x = 3x - 2   => -17
-- 15 + 12x = 3x - 2  => -1.889`,
+- 15 + 12x = 3x - 2  => -1.889
+- 3(5+4x) = 3(-2x) => -0.8333`,
   '2-5': `**Score Criteria**
 - **2 points** – States the student answer is **incorrect**.
 - **1 point** – Gives the correct expression but forgets to say the student answer is wrong.
