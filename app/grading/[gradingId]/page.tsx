@@ -56,15 +56,16 @@ Dependent Variable: Crime rate
   - Gives any plausible answer (e.g., x = −2) but with no clear justification.
 - **0 points** – Equation and answer both wrong or missing.
 
+
 **Non-Exhaustive Examples of Plausible Interpretations:**
-- 3*5+4x = 3(-2x)
-- 15+4x = 3-2x
-- 3(5+4x) = 3-2x
-- 15+12x = 3-2x
-- 15+4x = x
-- 15+12x = x
-- 15+4x = 3x-2
-- 15+12x = 3x-2`,
+- 3(5) + 4x = 3(-2x) => -1.5
+- 15 + 4x = 3 - 2x   => -2
+- 3(5+4x) = 3 - 2x   => -0.857
+- 15 + 12x = 3 - 2x  => -0.857
+- 15 + 4x = x        => -5
+- 15 + 12x = x       => -1.364
+- 15 + 4x = 3x - 2   => -17
+- 15 + 12x = 3x - 2  => -1.889`,
   '2-5': `**Score Criteria**
 - **2 points** – States the student answer is **incorrect**.
 - **1 point** – Gives the correct expression but forgets to say the student answer is wrong.
